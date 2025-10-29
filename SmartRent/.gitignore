@@ -1,0 +1,302 @@
+# Environment and Configuration
+.env
+.env.local
+.env.development
+.env.test
+.env.production
+config.json
+*.config.json
+
+# Logs
+*.log
+logs/
+*.pid
+*.pid.lock
+
+# Runtime and temp files
+.DS_Store
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# Backend (Python/FastAPI)
+backend/__pycache__/
+backend/*.py[cod]
+backend/*$py.class
+backend/*.so
+backend/.Python
+backend/build/
+backend/develop-eggs/
+backend/dist/
+backend/downloads/
+backend/eggs/
+backend/.eggs/
+backend/lib/
+backend/lib64/
+backend/parts/
+backend/sdist/
+backend/var/
+backend/wheels/
+backend/pip-wheel-metadata/
+backend/share/python-wheels/
+backend/*.egg-info/
+backend/.installed.cfg
+backend/*.egg
+backend/MANIFEST
+
+# Backend virtual environment
+backend/venv/
+backend/env/
+backend/.venv/
+backend/.env/
+
+# Backend testing and coverage
+backend/.coverage
+backend/.pytest_cache/
+backend/htmlcov/
+backend/.tox/
+backend/.nox/
+backend/.coverage
+backend/.coverage.*
+backend/coverage.xml
+backend/*.cover
+backend/*.py,cover
+backend/.hypothesis/
+
+# Backend uploads and media
+backend/uploads/
+backend/media/
+backend/static/collected/
+
+# Blockchain (Node.js/Hardhat)
+blockchain/node_modules/
+blockchain/npm-debug.log*
+blockchain/yarn-debug.log*
+blockchain/yarn-error.log*
+blockchain/lerna-debug.log*
+blockchain/.pnpm-debug.log*
+
+# Blockchain build artifacts
+blockchain/artifacts/
+blockchain/cache/
+blockchain/typechain/
+blockchain/typechain-types/
+
+# Blockchain deployment artifacts
+blockchain/deployments/
+blockchain/contracts/flattened/
+
+# Hardhat specific
+blockchain/.openzeppelin/
+
+# Mobile (Flutter)
+mobile/.dart_tool/
+mobile/.flutter-plugins
+mobile/.flutter-plugins-dependencies
+mobile/.packages
+mobile/.pub-cache/
+mobile/.pub/
+mobile/build/
+mobile/.fvm/
+
+# Mobile iOS
+mobile/ios/Flutter/Flutter.framework
+mobile/ios/Flutter/Flutter.podspec
+mobile/ios/Flutter/Generated.xcconfig
+mobile/ios/Flutter/app.flx
+mobile/ios/Flutter/app.zip
+mobile/ios/Flutter/flutter_assets/
+mobile/ios/ServiceDefinitions.json
+mobile/ios/Runner/GeneratedPluginRegistrant.*
+
+# Mobile Android
+mobile/android/app/debug
+mobile/android/app/profile
+mobile/android/app/release
+
+# Mobile generated files
+mobile/lib/services/models.g.dart
+mobile/lib/**/*.g.dart
+mobile/lib/**/*.freezed.dart
+
+# IoT Device
+iot_device/*.pyc
+iot_device/__pycache__/
+iot_device/.micropython/
+
+# Database
+*.db
+*.sqlite
+*.sqlite3
+
+# Docker
+.dockerignore
+docker-compose.override.yml
+
+# Docker volumes and data
+postgres_data/
+redis_data/
+grafana_data/
+prometheus_data/
+backend_uploads/
+
+# SSL Certificates
+*.pem
+*.key
+*.crt
+ssl/
+certs/
+
+# Monitoring and Logs
+monitoring/logs/
+*.monitoring
+
+# Backup files
+*.backup
+*.bak
+backup/
+backups/
+
+# OS generated files
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db
+
+# Editor directories and files
+.vscode/
+.idea/
+*.sublime-project
+*.sublime-workspace
+*~
+*.swp
+*.swo
+
+# Temporary files
+tmp/
+temp/
+.tmp/
+.temp/
+
+# Package files
+*.7z
+*.dmg
+*.gz
+*.iso
+*.jar
+*.rar
+*.tar
+*.zip
+
+# API Keys and Secrets (NEVER COMMIT THESE)
+*private*
+*secret*
+*api_key*
+*API_KEY*
+*password*
+*PASSWORD*
+private_keys/
+secrets/
+
+# Blockchain private keys and mnemonics
+mnemonic.txt
+*.mnemonic
+private.key
+*.private
+
+# Testing artifacts
+test-results/
+coverage/
+.nyc_output/
+
+# Local development overrides
+docker-compose.local.yml
+local.yml
+override.*
+
+# macOS
+.AppleDouble
+.LSOverride
+
+# Windows
+Thumbs.db
+ehthumbs.db
+Desktop.ini
+$RECYCLE.BIN/
+
+# Linux
+*~
+.fuse_hidden*
+.directory
+.Trash-*
+.nfs*
+
+# JetBrains IDEs
+.idea/
+*.iws
+*.iml
+*.ipr
+out/
+
+# Visual Studio Code
+.vscode/
+*.code-workspace
+
+# Sublime Text
+*.sublime-project
+*.sublime-workspace
+
+# Emacs
+*~
+\#*\#
+/.emacs.desktop
+/.emacs.desktop.lock
+*.elc
+auto-save-list
+tramp
+.\#*
+
+# Vim
+[._]*.s[a-v][a-z]
+[._]*.sw[a-p]
+[._]s[a-rt-v][a-z]
+[._]ss[a-gi-z]
+[._]sw[a-p]
+
+# Local History for Visual Studio Code
+.history/
+
+# Flutter/Dart/Pub related
+**/doc/api/
+**/ios/Flutter/.last_build_id
+.dart_tool/
+.flutter-plugins
+.flutter-plugins-dependencies
+.packages
+.pub-cache/
+.pub/
+/build/
+
+# Symbolication related
+app.*.symbols
+
+# Obfuscation related
+app.*.map.json
+
+# Android Studio will place build artifacts here
+/android/app/debug
+/android/app/profile
+/android/app/release
+
+
+
+
+
+
+
+

@@ -1,0 +1,43 @@
+# Backend Requirements
+fastapi==0.104.1
+uvicorn[standard]==0.24.0
+python-dotenv==1.0.0
+pydantic==2.5.0
+pydantic-settings==2.1.0
+
+# Database
+supabase==2.3.0
+sqlalchemy==2.0.23
+psycopg2-binary==2.9.9
+
+# Web3 and Blockchain
+web3==6.11.3
+eth-account==0.10.0
+
+# Async and HTTP
+httpx==0.25.2
+aiohttp==3.9.1
+
+# Authentication and Security
+python-jose[cryptography]==3.3.0
+passlib[bcrypt]==1.7.4
+python-multipart==0.0.6
+
+# Caching
+redis==5.0.1
+hiredis==2.2.3
+
+# Utilities
+python-dateutil==2.8.2
+pytz==2023.3
+
+# Testing
+pytest==7.4.3
+pytest-asyncio==0.21.1
+pytest-cov==4.1.0
+httpx==0.25.2
+
+# Development
+black==23.12.0
+flake8==6.1.0
+mypy==1.7.1

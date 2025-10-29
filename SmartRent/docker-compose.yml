@@ -1,0 +1,208 @@
+version: '3.8'
+
+services:
+  # PostgreSQL Database
+  db:
+    image: postgres:15-alpine
+    container_name: smartrent_db
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: smartrent_db
+      POSTGRES_USER: smartrent
+      POSTGRES_PASSWORD: password
+      PGDATA: /var/lib/postgresql/data/pgdata
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./backend/sql/init.sql:/docker-entrypoint-initdb.d/init.sql
+    networks:
+      - smartrent_network
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U smartrent -d smartrent_db"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # Redis Cache
+  redis:
+    image: redis:7-alpine
+    container_name: smartrent_redis
+    restart: unless-stopped
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+    networks:
+      - smartrent_network
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 3s
+      retries: 5
+
+  # SmartRent Backend API
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: smartrent_backend
+    restart: unless-stopped
+    ports:
+      - "8000:8000"
+    environment:
+      # Database
+      DATABASE_URL: postgresql://smartrent:password@db:5432/smartrent_db
+      
+      # Redis
+      REDIS_URL: redis://redis:6379
+      
+      # Application
+      ENVIRONMENT: development
+      DEBUG: "true"
+      SECRET_KEY: dev-secret-key-change-in-production
+      
+      # Web3/Blockchain
+      WEB3_PROVIDER_URL: https://goerli.infura.io/v3/YOUR_INFURA_PROJECT_ID
+      PRIVATE_KEY: ${PRIVATE_KEY:-}
+      CONTRACT_ADDRESS_ASSET_TOKEN: ${CONTRACT_ADDRESS_ASSET_TOKEN:-}
+      CONTRACT_ADDRESS_RENTAL_AGREEMENT: ${CONTRACT_ADDRESS_RENTAL_AGREEMENT:-}
+      
+      # CORS
+      ALLOWED_ORIGINS: '["http://localhost:3000", "http://localhost:8080", "http://localhost:8081"]'
+    volumes:
+      - ./backend:/app
+      - backend_uploads:/app/uploads
+    networks:
+      - smartrent_network
+    depends_on:
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/ping"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+  # Nginx Reverse Proxy (Optional - for production)
+  nginx:
+    image: nginx:alpine
+    container_name: smartrent_nginx
+    restart: unless-stopped
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./nginx/nginx.conf:/etc/nginx/nginx.conf:ro
+      - ./nginx/ssl:/etc/nginx/ssl:ro
+      - ./nginx/logs:/var/log/nginx
+    networks:
+      - smartrent_network
+    depends_on:
+      - backend
+    profiles:
+      - production
+
+  # Blockchain Development Node (Hardhat)
+  hardhat_node:
+    build:
+      context: ./blockchain
+      dockerfile: Dockerfile.dev
+    container_name: smartrent_hardhat
+    restart: unless-stopped
+    ports:
+      - "8545:8545"
+    volumes:
+      - ./blockchain:/app
+      - node_modules:/app/node_modules
+    networks:
+      - smartrent_network
+    command: npx hardhat node --hostname 0.0.0.0
+    profiles:
+      - development
+
+  # Smart Contract Deployer
+  contract_deployer:
+    build:
+      context: ./blockchain
+      dockerfile: Dockerfile
+    container_name: smartrent_deployer
+    environment:
+      PRIVATE_KEY: ${PRIVATE_KEY:-}
+      INFURA_PROJECT_ID: ${INFURA_PROJECT_ID:-}
+      ETHERSCAN_API_KEY: ${ETHERSCAN_API_KEY:-}
+    volumes:
+      - ./blockchain:/app
+      - node_modules:/app/node_modules
+    networks:
+      - smartrent_network
+    profiles:
+      - deploy
+    depends_on:
+      - hardhat_node
+
+  # Monitoring and Observability
+  grafana:
+    image: grafana/grafana:latest
+    container_name: smartrent_grafana
+    restart: unless-stopped
+    ports:
+      - "3001:3000"
+    environment:
+      GF_SECURITY_ADMIN_USER: admin
+      GF_SECURITY_ADMIN_PASSWORD: admin123
+    volumes:
+      - grafana_data:/var/lib/grafana
+      - ./monitoring/grafana/dashboards:/etc/grafana/provisioning/dashboards
+      - ./monitoring/grafana/datasources:/etc/grafana/provisioning/datasources
+    networks:
+      - smartrent_network
+    profiles:
+      - monitoring
+
+  prometheus:
+    image: prom/prometheus:latest
+    container_name: smartrent_prometheus
+    restart: unless-stopped
+    ports:
+      - "9090:9090"
+    volumes:
+      - ./monitoring/prometheus/prometheus.yml:/etc/prometheus/prometheus.yml
+      - prometheus_data:/prometheus
+    networks:
+      - smartrent_network
+    profiles:
+      - monitoring
+
+# Named Volumes
+volumes:
+  postgres_data:
+    driver: local
+  redis_data:
+    driver: local
+  backend_uploads:
+    driver: local
+  node_modules:
+    driver: local
+  grafana_data:
+    driver: local
+  prometheus_data:
+    driver: local
+
+# Networks
+networks:
+  smartrent_network:
+    driver: bridge
+    ipam:
+      config:
+        - subnet: 172.20.0.0/16
+
+
+
+
+
+
+
+

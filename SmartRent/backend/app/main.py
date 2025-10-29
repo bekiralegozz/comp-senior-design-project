@@ -1,0 +1,79 @@
+"""
+SmartRent Backend API
+A blockchain-enabled rental and asset-sharing platform backend.
+"""
+
+from fastapi import FastAPI, HTTPException
+from fastapi.middleware.cors import CORSMiddleware
+from contextlib import asynccontextmanager
+import uvicorn
+
+from app.core.config import settings
+from app.api.routes import assets, rentals, users
+
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    """Application lifespan management"""
+    # Startup
+    print("🚀 SmartRent Backend starting up...")
+    print(f"📡 Environment: {settings.ENVIRONMENT}")
+    print(f"🔗 Web3 Provider: {settings.WEB3_PROVIDER_URL}")
+    yield
+    # Shutdown
+    print("👋 SmartRent Backend shutting down...")
+
+
+# Initialize FastAPI app
+app = FastAPI(
+    title="SmartRent API",
+    description="Blockchain-enabled rental and asset-sharing platform",
+    version="1.0.0",
+    docs_url="/docs",
+    redoc_url="/redoc",
+    lifespan=lifespan
+)
+
+# Configure CORS
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=settings.ALLOWED_ORIGINS,
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
+
+# Health check endpoint
+@app.get("/ping")
+async def ping():
+    """Health check endpoint"""
+    return {
+        "status": "ok",
+        "message": "SmartRent Backend is running",
+        "version": "1.0.0",
+        "environment": settings.ENVIRONMENT
+    }
+
+@app.get("/")
+async def root():
+    """Root endpoint"""
+    return {
+        "message": "Welcome to SmartRent API",
+        "docs": "/docs",
+        "health": "/ping"
+    }
+
+# Include API routers
+app.include_router(assets.router, prefix="/api/v1/assets", tags=["Assets"])
+app.include_router(rentals.router, prefix="/api/v1/rentals", tags=["Rentals"])  
+app.include_router(users.router, prefix="/api/v1/users", tags=["Users"])
+
+
+if __name__ == "__main__":
+    uvicorn.run(
+        "main:app",
+        host="0.0.0.0",
+        port=8000,
+        reload=True if settings.ENVIRONMENT == "development" else False
+    )
+
