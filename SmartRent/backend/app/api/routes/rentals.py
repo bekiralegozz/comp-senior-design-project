@@ -2,17 +2,20 @@
 Rentals API routes
 """
 
-from fastapi import APIRouter, HTTPException
-from typing import List, Optional
+from typing import Optional
+
+from fastapi import APIRouter, Depends, HTTPException
+
+from app.api.deps.auth import require_verified_email
 
 router = APIRouter()
 
 
 @router.post("/", status_code=201)
-async def create_rental():
+async def create_rental(current_user=Depends(require_verified_email)):
     """Create a new rental agreement"""
     # TODO: Implement rental creation
-    return {"message": "Rental creation endpoint - TODO"}
+    return {"message": "Rental creation endpoint - TODO", "user_id": current_user.get("sub")}
 
 
 @router.get("/{rental_id}")

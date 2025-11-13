@@ -369,6 +369,123 @@ class ErrorResponse {
 }
 
 
+DateTime? _parseIsoDate(dynamic value) {
+  if (value is String) {
+    try {
+      return DateTime.parse(value).toLocal();
+    } catch (_) {
+      return null;
+    }
+  }
+  return null;
+}
+
+class AuthProfile {
+  final String id;
+  final String? fullName;
+  final String? email;
+  final String? walletAddress;
+  final String? avatarUrl;
+  final bool? isOnboarded;
+  final DateTime? createdAt;
+  final DateTime? updatedAt;
+  final DateTime? lastLoginAt;
+
+  AuthProfile({
+    required this.id,
+    this.fullName,
+    this.email,
+    this.walletAddress,
+    this.avatarUrl,
+    this.isOnboarded,
+    this.createdAt,
+    this.updatedAt,
+    this.lastLoginAt,
+  });
+
+  factory AuthProfile.fromJson(Map<String, dynamic> json) {
+    return AuthProfile(
+      id: json['id']?.toString() ?? '',
+      fullName: json['full_name'] as String?,
+      email: json['email'] as String?,
+      walletAddress: json['wallet_address'] as String?,
+      avatarUrl: json['avatar_url'] as String?,
+      isOnboarded: json['is_onboarded'] as bool?,
+      createdAt: _parseIsoDate(json['created_at']),
+      updatedAt: _parseIsoDate(json['updated_at']),
+      lastLoginAt: _parseIsoDate(json['last_login_at']),
+    );
+  }
+
+  Map<String, dynamic> toJson() {
+    return {
+      'id': id,
+      'full_name': fullName,
+      'email': email,
+      'wallet_address': walletAddress,
+      'avatar_url': avatarUrl,
+      'is_onboarded': isOnboarded,
+      'created_at': createdAt?.toIso8601String(),
+      'updated_at': updatedAt?.toIso8601String(),
+      'last_login_at': lastLoginAt?.toIso8601String(),
+    };
+  }
+}
+
+class AuthSession {
+  final String accessToken;
+  final String refreshToken;
+  final String tokenType;
+  final int expiresIn;
+  final String userId;
+  final AuthProfile? profile;
+
+  AuthSession({
+    required this.accessToken,
+    required this.refreshToken,
+    required this.tokenType,
+    required this.expiresIn,
+    required this.userId,
+    this.profile,
+  });
+
+  factory AuthSession.fromJson(Map<String, dynamic> json) {
+    final profileJson = json['profile'];
+    return AuthSession(
+      accessToken: json['access_token']?.toString() ?? '',
+      refreshToken: json['refresh_token']?.toString() ?? '',
+      tokenType: json['token_type']?.toString() ?? 'bearer',
+      expiresIn: (json['expires_in'] is int)
+          ? json['expires_in'] as int
+          : int.tryParse(json['expires_in']?.toString() ?? '0') ?? 0,
+      userId: json['user_id']?.toString() ??
+          (json['user']?['id']?.toString() ?? ''),
+      profile: profileJson is Map<String, dynamic>
+          ? AuthProfile.fromJson(profileJson)
+          : null,
+    );
+  }
+}
+
+class SignupResponse {
+  final String userId;
+  final bool requiresEmailVerification;
+
+  SignupResponse({
+    required this.userId,
+    required this.requiresEmailVerification,
+  });
+
+  factory SignupResponse.fromJson(Map<String, dynamic> json) {
+    return SignupResponse(
+      userId: json['user_id']?.toString() ?? '',
+      requiresEmailVerification:
+          json['requires_email_verification'] as bool? ?? true,
+    );
+  }
+}
+
+
 
 
 

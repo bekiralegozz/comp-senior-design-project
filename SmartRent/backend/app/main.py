@@ -9,7 +9,8 @@ from contextlib import asynccontextmanager
 import uvicorn
 
 from app.core.config import settings
-from app.api.routes import assets, rentals, users
+from app.core.middleware import SupabaseAuthMiddleware
+from app.api.routes import assets, auth, rentals, users
 
 
 @asynccontextmanager
@@ -43,6 +44,9 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+# Attach Supabase auth middleware (non-blocking by default)
+app.add_middleware(SupabaseAuthMiddleware)
+
 # Health check endpoint
 @app.get("/ping")
 async def ping():
@@ -64,8 +68,9 @@ async def root():
     }
 
 # Include API routers
+app.include_router(auth.router)
 app.include_router(assets.router, prefix="/api/v1/assets", tags=["Assets"])
-app.include_router(rentals.router, prefix="/api/v1/rentals", tags=["Rentals"])  
+app.include_router(rentals.router, prefix="/api/v1/rentals", tags=["Rentals"])
 app.include_router(users.router, prefix="/api/v1/users", tags=["Users"])
 
 

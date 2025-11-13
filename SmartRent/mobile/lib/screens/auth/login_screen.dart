@@ -15,6 +15,7 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
   final _emailController = TextEditingController();
   final _passwordController = TextEditingController();
   bool _obscurePassword = true;
+  bool _statusShown = false;
 
   @override
   void dispose() {
@@ -45,6 +46,36 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
     }
   }
 
+  Future<void> _handlePasswordReset() async {
+    final email = _emailController.text.trim();
+    if (email.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Enter your email to request a password reset.'),
+        ),
+      );
+      return;
+    }
+
+    await ref.read(authStateProvider.notifier).requestPasswordReset(email);
+    _statusShown = false;
+  }
+
+  Future<void> _handleMagicLink() async {
+    final email = _emailController.text.trim();
+    if (email.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Enter your email to receive a magic link.'),
+        ),
+      );
+      return;
+    }
+
+    await ref.read(authStateProvider.notifier).sendMagicLink(email);
+    _statusShown = false;
+  }
+
   Future<void> _handleWalletConnect() async {
     final success = await ref.read(authStateProvider.notifier).connectWallet();
 
@@ -65,6 +96,18 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
   @override
   Widget build(BuildContext context) {
     final authState = ref.watch(authStateProvider);
+    if (authState.statusMessage != null && !_statusShown) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (!mounted) return;
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text(authState.statusMessage!)),
+        );
+        ref.read(authStateProvider.notifier).clearStatusMessage();
+        _statusShown = true;
+      });
+    } else if (authState.statusMessage == null) {
+      _statusShown = false;
+    }
 
     return Scaffold(
       body: SafeArea(
@@ -159,6 +202,23 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                         : const Text('Login'),
                   ),
                   const SizedBox(height: 16),
+
+                  Align(
+                    alignment: Alignment.centerRight,
+                    child: TextButton(
+                      onPressed: authState.isLoading ? null : _handlePasswordReset,
+                      child: const Text('Forgot password?'),
+                    ),
+                  ),
+
+                  Align(
+                    alignment: Alignment.centerRight,
+                    child: TextButton(
+                      onPressed: authState.isLoading ? null : _handleMagicLink,
+                      child: const Text('Send me a magic link'),
+                    ),
+                  ),
+                  const SizedBox(height: 8),
 
                   // Divider
                   Row(

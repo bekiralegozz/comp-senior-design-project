@@ -18,6 +18,7 @@ class _RegisterScreenState extends ConsumerState<RegisterScreen> {
   final _confirmPasswordController = TextEditingController();
   bool _obscurePassword = true;
   bool _obscureConfirmPassword = true;
+  bool _statusShown = false;
 
   @override
   void dispose() {
@@ -38,7 +39,13 @@ class _RegisterScreenState extends ConsumerState<RegisterScreen> {
         );
 
     if (success && mounted) {
-      context.go('/');
+      final message = ref.read(authStateProvider).statusMessage ??
+          'Registration successful. Please verify your email.';
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(message)),
+      );
+      ref.read(authStateProvider.notifier).clearStatusMessage();
+      context.go('/auth/login');
     } else {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
@@ -54,6 +61,18 @@ class _RegisterScreenState extends ConsumerState<RegisterScreen> {
   @override
   Widget build(BuildContext context) {
     final authState = ref.watch(authStateProvider);
+    if (authState.statusMessage != null && !_statusShown) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (!mounted) return;
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text(authState.statusMessage!)),
+        );
+        ref.read(authStateProvider.notifier).clearStatusMessage();
+        _statusShown = true;
+      });
+    } else if (authState.statusMessage == null) {
+      _statusShown = false;
+    }
 
     return Scaffold(
       appBar: AppBar(

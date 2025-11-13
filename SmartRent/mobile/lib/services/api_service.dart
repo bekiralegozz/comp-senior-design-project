@@ -1,4 +1,4 @@
-import 'dart:convert';
+import 'dart:async';
 import 'package:dio/dio.dart';
 import 'package:flutter/foundation.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -13,7 +13,8 @@ class ApiService {
   ApiService._internal();
 
   late final Dio _dio;
-  String? _authToken;
+  String? _accessToken;
+  String? _refreshToken;
 
   /// Initialize the API service
   Future<void> initialize() async {
@@ -45,28 +46,190 @@ class ApiService {
   /// Load authentication token from storage
   Future<void> _loadAuthToken() async {
     final prefs = await SharedPreferences.getInstance();
-    _authToken = prefs.getString('auth_token');
-    if (_authToken != null) {
-      _dio.options.headers['Authorization'] = 'Bearer $_authToken';
+    _accessToken = prefs.getString('auth_token');
+    _refreshToken = prefs.getString('refresh_token');
+    if (_accessToken != null) {
+      _dio.options.headers['Authorization'] = 'Bearer $_accessToken';
     }
   }
 
-  /// Set authentication token
-  Future<void> setAuthToken(String token) async {
-    _authToken = token;
-    _dio.options.headers['Authorization'] = 'Bearer $token';
-    
+  Future<void> _persistSession(AuthSession session) async {
+    _accessToken = session.accessToken;
+    _refreshToken = session.refreshToken;
+    _dio.options.headers['Authorization'] = 'Bearer ${session.accessToken}';
+
     final prefs = await SharedPreferences.getInstance();
-    await prefs.setString('auth_token', token);
+    await prefs.setString('auth_token', session.accessToken);
+    await prefs.setString('refresh_token', session.refreshToken);
   }
 
-  /// Clear authentication token
-  Future<void> clearAuthToken() async {
-    _authToken = null;
+  /// Clear stored authentication session
+  Future<void> clearSession() async {
+    _accessToken = null;
+    _refreshToken = null;
     _dio.options.headers.remove('Authorization');
     
     final prefs = await SharedPreferences.getInstance();
     await prefs.remove('auth_token');
+    await prefs.remove('refresh_token');
+  }
+
+  /// Attempt to restore session using stored refresh token
+  Future<AuthSession?> restoreSession() async {
+    if (_refreshToken == null) {
+      final prefs = await SharedPreferences.getInstance();
+      _refreshToken = prefs.getString('refresh_token');
+    }
+    if (_refreshToken == null) {
+      return null;
+    }
+
+    try {
+      return await refreshSession();
+    } catch (_) {
+      await clearSession();
+      return null;
+    }
+  }
+
+  /// Login with email and password
+  Future<AuthSession> loginWithEmail({
+    required String email,
+    required String password,
+  }) async {
+    try {
+      final response = await _dio.post(
+        '/auth/login',
+        data: {
+          'email': email,
+          'password': password,
+        },
+      );
+      final session = AuthSession.fromJson(response.data as Map<String, dynamic>);
+      await _persistSession(session);
+      return session;
+    } catch (e) {
+      throw _handleError(e);
+    }
+  }
+
+  /// Sign up a new user (email/password)
+  Future<SignupResponse> signup({
+    required String email,
+    required String password,
+    String? fullName,
+  }) async {
+    try {
+      final response = await _dio.post(
+        '/auth/signup',
+        data: {
+          'email': email,
+          'password': password,
+          if (fullName != null && fullName.isNotEmpty) 'full_name': fullName,
+        },
+      );
+      return SignupResponse.fromJson(response.data as Map<String, dynamic>);
+    } catch (e) {
+      throw _handleError(e);
+    }
+  }
+
+  /// Refresh session using stored refresh token
+  Future<AuthSession> refreshSession({String? refreshToken}) async {
+    final token = refreshToken ?? _refreshToken;
+    if (token == null || token.isEmpty) {
+      throw ApiException(
+        'Refresh token missing',
+        type: ApiExceptionType.unauthorized,
+      );
+    }
+
+    try {
+      final response = await _dio.post(
+        '/auth/refresh',
+        data: {'refresh_token': token},
+        options: Options(
+          headers: {
+            'Authorization': null,
+          },
+        ),
+      );
+      final session = AuthSession.fromJson(response.data as Map<String, dynamic>);
+      await _persistSession(session);
+      return session;
+    } catch (e) {
+      throw _handleError(e);
+    }
+  }
+
+  /// Logout and revoke refresh token
+  Future<void> logout({String? refreshToken}) async {
+    try {
+      await _dio.post(
+        '/auth/logout',
+        data: {
+          'refresh_token': refreshToken ?? _refreshToken,
+        },
+      );
+    } catch (e) {
+      // Swallow unauthorized errors on logout
+      final error = _handleError(e);
+      if (error.type != ApiExceptionType.unauthorized) {
+        throw error;
+      }
+    } finally {
+      await clearSession();
+    }
+  }
+
+  /// Request password reset email
+  Future<void> requestPasswordReset(String email, {String? redirectTo}) async {
+    try {
+      await _dio.post(
+        '/auth/password/reset',
+        data: {
+          'email': email,
+          if (redirectTo != null && redirectTo.isNotEmpty)
+            'redirect_to': redirectTo,
+        },
+      );
+    } catch (e) {
+      throw _handleError(e);
+    }
+  }
+
+  /// Confirm password reset with token
+  Future<void> confirmPasswordReset({
+    required String accessToken,
+    required String newPassword,
+  }) async {
+    try {
+      await _dio.post(
+        '/auth/password/reset/confirm',
+        data: {
+          'access_token': accessToken,
+          'new_password': newPassword,
+        },
+      );
+    } catch (e) {
+      throw _handleError(e);
+    }
+  }
+
+  /// Request a magic link / OTP email
+  Future<void> sendMagicLink(String email, {String? redirectTo}) async {
+    try {
+      await _dio.post(
+        '/auth/magic-link',
+        data: {
+          'email': email,
+          if (redirectTo != null && redirectTo.isNotEmpty)
+            'redirect_to': redirectTo,
+        },
+      );
+    } catch (e) {
+      throw _handleError(e);
+    }
   }
 
   // Health Check
@@ -362,8 +525,7 @@ class _AuthInterceptor extends Interceptor {
   void onError(DioException err, ErrorInterceptorHandler handler) {
     if (err.response?.statusCode == 401) {
       // Handle token expiration
-      ApiService()._authToken = null;
-      // TODO: Navigate to login screen or refresh token
+      unawaited(ApiService().clearSession());
     }
     super.onError(err, handler);
   }

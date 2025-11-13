@@ -3,7 +3,7 @@ Configuration management for SmartRent Backend
 """
 
 import os
-from typing import List
+from typing import List, Optional
 from pydantic import BaseSettings, Field
 
 
@@ -44,6 +44,20 @@ class Settings(BaseSettings):
     )
     ACCESS_TOKEN_EXPIRE_MINUTES: int = Field(default=30, env="ACCESS_TOKEN_EXPIRE_MINUTES")
     ALGORITHM: str = "HS256"
+
+    # Supabase
+    SUPABASE_URL = "https://oajhrwleyhpeelbrdqdd.supabase.co"
+    SUPABASE_ANON_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im9hamhyd2xleWhwZWVsYnJkcWRkIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjE3NTYzODAsImV4cCI6MjA3NzMzMjM4MH0.75RqVwo3SUxeizJeDC1O_-LgBff7fT4mtaf4Qb6aehQ"
+    SUPABASE_SERVICE_ROLE_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im9hamhyd2xleWhwZWVsYnJkcWRkIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc2MTc1NjM4MCwiZXhwIjoyMDc3MzMyMzgwfQ.E-L9olrQsFS3pzxu2VuPAqrtamezFk8GQBs1bsgiX-M"
+    SUPABASE_EMAIL_REDIRECT_TO: str = Field(default="", env="SUPABASE_EMAIL_REDIRECT_TO")
+    SUPABASE_JWT_AUDIENCE: str = Field(default="authenticated", env="SUPABASE_JWT_AUDIENCE")
+
+    # Auth cookies
+    AUTH_REFRESH_TOKEN_COOKIE_NAME: str = Field(default="sb-refresh-token", env="AUTH_REFRESH_TOKEN_COOKIE_NAME")
+    AUTH_REFRESH_TOKEN_COOKIE_MAX_AGE: int = Field(default=60 * 60 * 24 * 30, env="AUTH_REFRESH_TOKEN_COOKIE_MAX_AGE")  # 30 days
+    AUTH_REFRESH_TOKEN_COOKIE_SECURE: bool = Field(default=True, env="AUTH_REFRESH_TOKEN_COOKIE_SECURE")
+    AUTH_REFRESH_TOKEN_COOKIE_SAMESITE: str = Field(default="lax", env="AUTH_REFRESH_TOKEN_COOKIE_SAMESITE")
+    AUTH_REFRESH_TOKEN_COOKIE_DOMAIN: Optional[str] = Field(default=None, env="AUTH_REFRESH_TOKEN_COOKIE_DOMAIN")
     
     # Redis (for caching)
     REDIS_URL: str = Field(default="redis://localhost:6379", env="REDIS_URL")
