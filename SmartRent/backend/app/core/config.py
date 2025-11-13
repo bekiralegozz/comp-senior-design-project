@@ -46,9 +46,9 @@ class Settings(BaseSettings):
     ALGORITHM: str = "HS256"
 
     # Supabase
-    SUPABASE_URL = "https://oajhrwleyhpeelbrdqdd.supabase.co"
-    SUPABASE_ANON_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im9hamhyd2xleWhwZWVsYnJkcWRkIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjE3NTYzODAsImV4cCI6MjA3NzMzMjM4MH0.75RqVwo3SUxeizJeDC1O_-LgBff7fT4mtaf4Qb6aehQ"
-    SUPABASE_SERVICE_ROLE_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im9hamhyd2xleWhwZWVsYnJkcWRkIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc2MTc1NjM4MCwiZXhwIjoyMDc3MzMyMzgwfQ.E-L9olrQsFS3pzxu2VuPAqrtamezFk8GQBs1bsgiX-M"
+    SUPABASE_URL: str = Field(default="", env="SUPABASE_URL")
+    SUPABASE_ANON_KEY: str = Field(default="", env="SUPABASE_ANON_KEY")
+    SUPABASE_SERVICE_ROLE_KEY: str = Field(default="", env="SUPABASE_SERVICE_ROLE_KEY")
     SUPABASE_EMAIL_REDIRECT_TO: str = Field(default="", env="SUPABASE_EMAIL_REDIRECT_TO")
     SUPABASE_JWT_AUDIENCE: str = Field(default="authenticated", env="SUPABASE_JWT_AUDIENCE")
 
