@@ -25,6 +25,8 @@ class SignupRequest(BaseModel):
     password: str = Field(min_length=8, max_length=72)
     full_name: Optional[str] = None
     referral_code: Optional[str] = None
+    wallet_address: Optional[str] = None
+    avatar_url: Optional[str] = None
 
 
 class SignupResponse(BaseModel):
@@ -92,17 +94,64 @@ async def _call_supabase(func, *args, **kwargs):
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc
 
 
-async def _upsert_profile(user_id: UUID, email: str, full_name: Optional[str]) -> None:
+async def _upsert_profile(
+    user_id: UUID,
+    email: str,
+    full_name: Optional[str],
+    wallet_address: Optional[str] = None,
+    avatar_url: Optional[str] = None,
+) -> None:
+    """Upsert profile into Supabase profiles table.
+    
+    Note: This requires the user to exist in auth.users first (created by signup).
+    """
     client = get_supabase_client()
     payload: Dict[str, Any] = {
         "id": str(user_id),
         "email": email,
         "full_name": full_name,
         "auth_provider": "email",
+        "wallet_address": wallet_address,
+        "avatar_url": avatar_url,
+        "is_onboarded": False,
     }
+    # Remove None values but keep False for is_onboarded
     payload = {k: v for k, v in payload.items() if v is not None}
     table = client.table("profiles")
-    await _call_supabase(table.upsert(payload, on_conflict="id").execute)
+    try:
+        # Use upsert with on_conflict parameter
+        response = await _call_supabase(
+            table.upsert(payload, on_conflict="id").execute
+        )
+        # Verify the response
+        if not hasattr(response, 'data') or not response.data:
+            import logging
+            logger = logging.getLogger(__name__)
+            logger.warning(f"Upsert returned no data for user {user_id}")
+    except Exception as upsert_error:
+        # Try insert as fallback if upsert fails
+        import logging
+        logger = logging.getLogger(__name__)
+        logger.warning(f"Upsert failed for user {user_id}, trying insert: {str(upsert_error)}")
+        try:
+            response = await _call_supabase(
+                table.insert(payload).execute
+            )
+        except Exception as insert_error:
+            logger.error(f"Both upsert and insert failed for user {user_id}: {str(insert_error)}")
+            raise
+    except HTTPException as e:
+        # Re-raise HTTP exceptions
+        raise
+    except Exception as e:
+        # Log and re-raise other exceptions
+        import logging
+        logger = logging.getLogger(__name__)
+        logger.error(f"Failed to upsert profile for user {user_id}: {str(e)}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to create profile: {str(e)}"
+        ) from e
 
 
 async def _fetch_profile(user_id: UUID) -> Optional[ProfilePayload]:
@@ -221,7 +270,28 @@ async def signup(payload: SignupRequest) -> SignupResponse:
 
     user_id = UUID(str(getattr(user, "id", "")))
 
-    await _upsert_profile(user_id, payload.email, payload.full_name)
+    # Upsert profile - this must happen after user is created in auth.users
+    try:
+        await _upsert_profile(
+            user_id,
+            payload.email,
+            payload.full_name,
+            wallet_address=payload.wallet_address,
+            avatar_url=payload.avatar_url,
+        )
+    except HTTPException:
+        # Re-raise HTTP exceptions
+        raise
+    except Exception as e:
+        # If profile creation fails, log but don't fail the signup
+        # The user is already created in auth.users
+        import logging
+        logger = logging.getLogger(__name__)
+        logger.warning(
+            f"User {user_id} created in auth.users but profile creation failed: {str(e)}. "
+            "Profile can be created later."
+        )
+        # Continue - user can still sign in and profile can be created on first login
 
     requires_verification = getattr(user, "email_confirmed_at", None) is None
     return SignupResponse(user_id=user_id, requires_email_verification=requires_verification)

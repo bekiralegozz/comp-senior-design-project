@@ -118,6 +118,8 @@ class ApiService {
     required String email,
     required String password,
     String? fullName,
+    String? walletAddress,
+    String? avatarUrl,
   }) async {
     try {
       final response = await _dio.post(
@@ -126,6 +128,8 @@ class ApiService {
           'email': email,
           'password': password,
           if (fullName != null && fullName.isNotEmpty) 'full_name': fullName,
+          if (walletAddress != null && walletAddress.isNotEmpty) 'wallet_address': walletAddress,
+          if (avatarUrl != null && avatarUrl.isNotEmpty) 'avatar_url': avatarUrl,
         },
       );
       return SignupResponse.fromJson(response.data as Map<String, dynamic>);

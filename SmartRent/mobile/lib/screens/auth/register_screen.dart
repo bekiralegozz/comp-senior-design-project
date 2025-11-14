@@ -16,6 +16,8 @@ class _RegisterScreenState extends ConsumerState<RegisterScreen> {
   final _emailController = TextEditingController();
   final _passwordController = TextEditingController();
   final _confirmPasswordController = TextEditingController();
+  final _walletAddressController = TextEditingController();
+  final _avatarUrlController = TextEditingController();
   bool _obscurePassword = true;
   bool _obscureConfirmPassword = true;
   bool _statusShown = false;
@@ -26,6 +28,8 @@ class _RegisterScreenState extends ConsumerState<RegisterScreen> {
     _emailController.dispose();
     _passwordController.dispose();
     _confirmPasswordController.dispose();
+    _walletAddressController.dispose();
+    _avatarUrlController.dispose();
     super.dispose();
   }
 
@@ -36,6 +40,12 @@ class _RegisterScreenState extends ConsumerState<RegisterScreen> {
           _emailController.text.trim(),
           _passwordController.text,
           _displayNameController.text.trim(),
+          walletAddress: _walletAddressController.text.trim().isEmpty 
+              ? null 
+              : _walletAddressController.text.trim(),
+          avatarUrl: _avatarUrlController.text.trim().isEmpty 
+              ? null 
+              : _avatarUrlController.text.trim(),
         );
 
     if (success && mounted) {
@@ -187,6 +197,49 @@ class _RegisterScreenState extends ConsumerState<RegisterScreen> {
                     }
                     if (value != _passwordController.text) {
                       return 'Passwords do not match';
+                    }
+                    return null;
+                  },
+                ),
+                const SizedBox(height: 16),
+
+                // Wallet Address Field (Optional)
+                TextFormField(
+                  controller: _walletAddressController,
+                  decoration: const InputDecoration(
+                    labelText: 'Wallet Address (Optional)',
+                    hintText: '0x...',
+                    prefixIcon: Icon(Icons.account_balance_wallet_outlined),
+                    helperText: 'You can add your wallet address later',
+                  ),
+                  validator: (value) {
+                    if (value != null && value.isNotEmpty) {
+                      // Basic Ethereum address validation
+                      if (!value.startsWith('0x') || value.length != 42) {
+                        return 'Please enter a valid Ethereum address';
+                      }
+                    }
+                    return null;
+                  },
+                ),
+                const SizedBox(height: 16),
+
+                // Avatar URL Field (Optional)
+                TextFormField(
+                  controller: _avatarUrlController,
+                  keyboardType: TextInputType.url,
+                  decoration: const InputDecoration(
+                    labelText: 'Profile Picture URL (Optional)',
+                    hintText: 'https://...',
+                    prefixIcon: Icon(Icons.image_outlined),
+                    helperText: 'You can add your profile picture later',
+                  ),
+                  validator: (value) {
+                    if (value != null && value.isNotEmpty) {
+                      final uri = Uri.tryParse(value);
+                      if (uri == null || !uri.hasScheme || (!uri.scheme.startsWith('http'))) {
+                        return 'Please enter a valid URL';
+                      }
                     }
                     return null;
                   },

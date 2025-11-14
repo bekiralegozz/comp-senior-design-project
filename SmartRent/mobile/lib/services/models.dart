@@ -3,7 +3,7 @@ import 'package:json_annotation/json_annotation.dart';
 part 'models.g.dart';
 
 /// Base API response model
-@JsonSerializable()
+@JsonSerializable(genericArgumentFactories: true)
 class ApiResponse<T> {
   final bool success;
   final String? message;
@@ -28,7 +28,7 @@ class ApiResponse<T> {
 }
 
 /// Pagination model
-@JsonSerializable()
+@JsonSerializable(genericArgumentFactories: true)
 class PaginatedResponse<T> {
   final List<T> items;
   final int total;

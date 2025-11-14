@@ -4,7 +4,8 @@ Configuration management for SmartRent Backend
 
 import os
 from typing import List, Optional
-from pydantic import BaseSettings, Field
+from pydantic import Field
+from pydantic_settings import BaseSettings
 
 
 class Settings(BaseSettings):
@@ -18,7 +19,7 @@ class Settings(BaseSettings):
     # API
     API_V1_STR: str = "/api/v1"
     ALLOWED_ORIGINS: List[str] = Field(
-        default=["http://localhost:3000", "http://localhost:8080"],
+        default=["http://localhost:3000", "http://localhost:8080", "http://localhost:8081", "http://127.0.0.1:8080", "http://127.0.0.1:8081"],
         env="ALLOWED_ORIGINS"
     )
     

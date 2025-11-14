@@ -192,7 +192,13 @@ class AuthNotifier extends StateNotifier<AuthState> {
     }
   }
 
-  Future<bool> register(String email, String password, String displayName) async {
+  Future<bool> register(
+    String email,
+    String password,
+    String displayName, {
+    String? walletAddress,
+    String? avatarUrl,
+  }) async {
     await _ensureInitialized();
     state = state.copyWith(
       isLoading: true,
@@ -205,6 +211,8 @@ class AuthNotifier extends StateNotifier<AuthState> {
         email: email,
         password: password,
         fullName: displayName,
+        walletAddress: walletAddress,
+        avatarUrl: avatarUrl,
       );
 
       state = state.copyWith(
