@@ -1,5 +1,5 @@
 # Environment and Configuration
-#.env
+.env
 .env.local
 .env.development
 .env.test
@@ -22,8 +22,9 @@ logs/
 *~
 
 # Backend (Python/FastAPI)
-backend/__pycache__/
-backend/*.py[cod]
+**/__pycache__/
+*.py[cod]
+__pycache__/
 backend/*$py.class
 backend/*.so
 backend/.Python

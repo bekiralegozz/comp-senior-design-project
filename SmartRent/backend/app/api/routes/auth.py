@@ -210,7 +210,8 @@ async def _upsert_profile(
 
 
 async def _fetch_profile(user_id: UUID) -> Optional[ProfilePayload]:
-    client = get_supabase_client()
+    # Use service_role to read profiles (bypasses RLS)
+    client = get_supabase_client(use_service_role=True)
     table = client.table("profiles")
     response = await _call_supabase(table.select("*").eq("id", str(user_id)).limit(1).execute)
     data = getattr(response, "data", None)
@@ -236,7 +237,8 @@ async def _fetch_profile(user_id: UUID) -> Optional[ProfilePayload]:
 
 
 async def _update_last_login(user_id: UUID) -> None:
-    client = get_supabase_client()
+    # Use service_role to update profiles (bypasses RLS)
+    client = get_supabase_client(use_service_role=True)
     table = client.table("profiles")
     await _call_supabase(
         table.update({"last_login_at": datetime.now(timezone.utc).isoformat()}).eq("id", str(user_id)).execute
