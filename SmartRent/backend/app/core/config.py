@@ -3,8 +3,9 @@ Configuration management for SmartRent Backend
 """
 
 import os
-from typing import List
-from pydantic import BaseSettings, Field
+from typing import List, Optional
+from pydantic import Field
+from pydantic_settings import BaseSettings
 
 
 class Settings(BaseSettings):
@@ -18,7 +19,7 @@ class Settings(BaseSettings):
     # API
     API_V1_STR: str = "/api/v1"
     ALLOWED_ORIGINS: List[str] = Field(
-        default=["http://localhost:3000", "http://localhost:8080"],
+        default=["http://localhost:3000", "http://localhost:8080", "http://localhost:8081", "http://127.0.0.1:8080", "http://127.0.0.1:8081"],
         env="ALLOWED_ORIGINS"
     )
     
@@ -44,6 +45,20 @@ class Settings(BaseSettings):
     )
     ACCESS_TOKEN_EXPIRE_MINUTES: int = Field(default=30, env="ACCESS_TOKEN_EXPIRE_MINUTES")
     ALGORITHM: str = "HS256"
+
+    # Supabase
+    SUPABASE_URL: str = Field(default="", env="SUPABASE_URL")
+    SUPABASE_ANON_KEY: str = Field(default="", env="SUPABASE_ANON_KEY")
+    SUPABASE_SERVICE_ROLE_KEY: str = Field(default="", env="SUPABASE_SERVICE_ROLE_KEY")
+    SUPABASE_EMAIL_REDIRECT_TO: str = Field(default="", env="SUPABASE_EMAIL_REDIRECT_TO")
+    SUPABASE_JWT_AUDIENCE: str = Field(default="authenticated", env="SUPABASE_JWT_AUDIENCE")
+
+    # Auth cookies
+    AUTH_REFRESH_TOKEN_COOKIE_NAME: str = Field(default="sb-refresh-token", env="AUTH_REFRESH_TOKEN_COOKIE_NAME")
+    AUTH_REFRESH_TOKEN_COOKIE_MAX_AGE: int = Field(default=60 * 60 * 24 * 30, env="AUTH_REFRESH_TOKEN_COOKIE_MAX_AGE")  # 30 days
+    AUTH_REFRESH_TOKEN_COOKIE_SECURE: bool = Field(default=True, env="AUTH_REFRESH_TOKEN_COOKIE_SECURE")
+    AUTH_REFRESH_TOKEN_COOKIE_SAMESITE: str = Field(default="lax", env="AUTH_REFRESH_TOKEN_COOKIE_SAMESITE")
+    AUTH_REFRESH_TOKEN_COOKIE_DOMAIN: Optional[str] = Field(default=None, env="AUTH_REFRESH_TOKEN_COOKIE_DOMAIN")
     
     # Redis (for caching)
     REDIS_URL: str = Field(default="redis://localhost:6379", env="REDIS_URL")

@@ -16,8 +16,11 @@ class _RegisterScreenState extends ConsumerState<RegisterScreen> {
   final _emailController = TextEditingController();
   final _passwordController = TextEditingController();
   final _confirmPasswordController = TextEditingController();
+  final _walletAddressController = TextEditingController();
+  final _avatarUrlController = TextEditingController();
   bool _obscurePassword = true;
   bool _obscureConfirmPassword = true;
+  bool _statusShown = false;
 
   @override
   void dispose() {
@@ -25,6 +28,8 @@ class _RegisterScreenState extends ConsumerState<RegisterScreen> {
     _emailController.dispose();
     _passwordController.dispose();
     _confirmPasswordController.dispose();
+    _walletAddressController.dispose();
+    _avatarUrlController.dispose();
     super.dispose();
   }
 
@@ -35,25 +40,96 @@ class _RegisterScreenState extends ConsumerState<RegisterScreen> {
           _emailController.text.trim(),
           _passwordController.text,
           _displayNameController.text.trim(),
+          walletAddress: _walletAddressController.text.trim().isEmpty 
+              ? null 
+              : _walletAddressController.text.trim(),
+          avatarUrl: _avatarUrlController.text.trim().isEmpty 
+              ? null 
+              : _avatarUrlController.text.trim(),
         );
 
-    if (success && mounted) {
-      context.go('/');
-    } else {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text(ref.read(authStateProvider).error ?? 'Registration failed'),
-            backgroundColor: Colors.red,
+    if (!mounted) return;
+
+    final authState = ref.read(authStateProvider);
+
+    if (success) {
+      // Registration successful - show success message and navigate to login
+      final message = authState.statusMessage ??
+          'Registration successful. Please verify your email.';
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Row(
+            children: [
+              const Icon(Icons.check_circle, color: Colors.white),
+              const SizedBox(width: 8),
+              Expanded(child: Text(message)),
+            ],
           ),
-        );
-      }
+          backgroundColor: Colors.green,
+          behavior: SnackBarBehavior.floating,
+          duration: const Duration(seconds: 4),
+        ),
+      );
+      ref.read(authStateProvider.notifier).clearStatusMessage();
+      // Navigate to login screen after a short delay
+      Future.delayed(const Duration(milliseconds: 500), () {
+        if (mounted) {
+          context.go('/auth/login');
+        }
+      });
+    } else {
+      // Registration failed - show error, clear only password fields, stay on register screen
+      final errorMessage = authState.error ?? 'Registration failed. Please try again.';
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Row(
+            children: [
+              const Icon(Icons.error_outline, color: Colors.white),
+              const SizedBox(width: 8),
+              Expanded(child: Text(errorMessage)),
+            ],
+          ),
+          backgroundColor: Colors.red,
+          behavior: SnackBarBehavior.floating,
+          duration: const Duration(seconds: 5),
+        ),
+      );
+      // Clear only password fields, keep other fields
+      _passwordController.clear();
+      _confirmPasswordController.clear();
+      // Clear error from state after showing
+      ref.read(authStateProvider.notifier).clearErrorMessage();
     }
   }
 
   @override
   Widget build(BuildContext context) {
     final authState = ref.watch(authStateProvider);
+    
+    // Show error messages from auth state (e.g., from other sources)
+    if (authState.error != null && !_statusShown) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (!mounted) return;
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Row(
+              children: [
+                const Icon(Icons.error_outline, color: Colors.white),
+                const SizedBox(width: 8),
+                Expanded(child: Text(authState.error!)),
+              ],
+            ),
+            backgroundColor: Colors.red,
+            behavior: SnackBarBehavior.floating,
+            duration: const Duration(seconds: 5),
+          ),
+        );
+        ref.read(authStateProvider.notifier).clearErrorMessage();
+        _statusShown = true;
+      });
+    } else if (authState.error == null && authState.statusMessage == null) {
+      _statusShown = false;
+    }
 
     return Scaffold(
       appBar: AppBar(
@@ -136,8 +212,8 @@ class _RegisterScreenState extends ConsumerState<RegisterScreen> {
                     if (value == null || value.isEmpty) {
                       return 'Please enter your password';
                     }
-                    if (value.length < 6) {
-                      return 'Password must be at least 6 characters';
+                    if (value.length < 8) {
+                      return 'Password must be at least 8 characters';
                     }
                     return null;
                   },
@@ -168,6 +244,49 @@ class _RegisterScreenState extends ConsumerState<RegisterScreen> {
                     }
                     if (value != _passwordController.text) {
                       return 'Passwords do not match';
+                    }
+                    return null;
+                  },
+                ),
+                const SizedBox(height: 16),
+
+                // Wallet Address Field (Optional)
+                TextFormField(
+                  controller: _walletAddressController,
+                  decoration: const InputDecoration(
+                    labelText: 'Wallet Address (Optional)',
+                    hintText: '0x...',
+                    prefixIcon: Icon(Icons.account_balance_wallet_outlined),
+                    helperText: 'You can add your wallet address later',
+                  ),
+                  validator: (value) {
+                    if (value != null && value.isNotEmpty) {
+                      // Basic Ethereum address validation
+                      if (!value.startsWith('0x') || value.length != 42) {
+                        return 'Please enter a valid Ethereum address';
+                      }
+                    }
+                    return null;
+                  },
+                ),
+                const SizedBox(height: 16),
+
+                // Avatar URL Field (Optional)
+                TextFormField(
+                  controller: _avatarUrlController,
+                  keyboardType: TextInputType.url,
+                  decoration: const InputDecoration(
+                    labelText: 'Profile Picture URL (Optional)',
+                    hintText: 'https://...',
+                    prefixIcon: Icon(Icons.image_outlined),
+                    helperText: 'You can add your profile picture later',
+                  ),
+                  validator: (value) {
+                    if (value != null && value.isNotEmpty) {
+                      final uri = Uri.tryParse(value);
+                      if (uri == null || !uri.hasScheme || (!uri.scheme.startsWith('http'))) {
+                        return 'Please enter a valid URL';
+                      }
                     }
                     return null;
                   },

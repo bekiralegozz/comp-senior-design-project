@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:go_router/go_router.dart';
 import '../../core/providers/auth_provider.dart';
 
 class SettingsScreen extends ConsumerWidget {
@@ -20,7 +21,7 @@ class SettingsScreen extends ConsumerWidget {
           ListTile(
             leading: const Icon(Icons.person_outline),
             title: const Text('Profile'),
-            subtitle: Text(authState.user?.displayName ?? 'Not set'),
+            subtitle: Text(authState.profile?.fullName ?? 'Not set'),
             trailing: const Icon(Icons.chevron_right),
             onTap: () {
               // Navigate to profile edit
@@ -29,7 +30,7 @@ class SettingsScreen extends ConsumerWidget {
           ListTile(
             leading: const Icon(Icons.email_outlined),
             title: const Text('Email'),
-            subtitle: Text(authState.user?.email ?? 'Not set'),
+            subtitle: Text(authState.profile?.email ?? 'Not set'),
             trailing: const Icon(Icons.chevron_right),
             onTap: () {
               // Navigate to email edit
@@ -42,7 +43,7 @@ class SettingsScreen extends ConsumerWidget {
           ListTile(
             leading: const Icon(Icons.account_balance_wallet_outlined),
             title: const Text('Connected Wallet'),
-            subtitle: Text(authState.walletAddress ?? 'Not connected'),
+            subtitle: Text(authState.profile?.walletAddress ?? 'Not connected'),
             trailing: const Icon(Icons.chevron_right),
             onTap: () {
               // Navigate to wallet settings
@@ -128,6 +129,10 @@ class SettingsScreen extends ConsumerWidget {
 
               if (confirm == true) {
                 await ref.read(authStateProvider.notifier).logout();
+                // Navigate to login screen after logout
+                if (context.mounted) {
+                  context.go('/auth/login');
+                }
               }
             },
           ),

@@ -15,6 +15,7 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
   final _emailController = TextEditingController();
   final _passwordController = TextEditingController();
   bool _obscurePassword = true;
+  bool _statusShown = false;
 
   @override
   void dispose() {
@@ -31,40 +32,160 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
           _passwordController.text,
         );
 
-    if (success && mounted) {
+    if (!mounted) return;
+
+    if (success) {
+      // Login successful - navigate to home
       context.go('/');
     } else {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text(ref.read(authStateProvider).error ?? 'Login failed'),
-            backgroundColor: Colors.red,
+      // Login failed - show error message
+      final errorMessage = ref.read(authStateProvider).error ?? 'Login failed. Please try again.';
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Row(
+            children: [
+              const Icon(Icons.error_outline, color: Colors.white),
+              const SizedBox(width: 8),
+              Expanded(child: Text(errorMessage)),
+            ],
           ),
-        );
-      }
+          backgroundColor: Colors.red,
+          behavior: SnackBarBehavior.floating,
+          duration: const Duration(seconds: 5),
+        ),
+      );
+      ref.read(authStateProvider.notifier).clearErrorMessage();
     }
+  }
+
+  Future<void> _handlePasswordReset() async {
+    final email = _emailController.text.trim();
+    if (email.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Row(
+            children: [
+              const Icon(Icons.info_outline, color: Colors.white),
+              const SizedBox(width: 8),
+              const Expanded(child: Text('Enter your email to request a password reset.')),
+            ],
+          ),
+          backgroundColor: Colors.blue,
+          behavior: SnackBarBehavior.floating,
+          duration: const Duration(seconds: 3),
+        ),
+      );
+      return;
+    }
+
+    await ref.read(authStateProvider.notifier).requestPasswordReset(email);
+    _statusShown = false;
+  }
+
+  Future<void> _handleMagicLink() async {
+    final email = _emailController.text.trim();
+    if (email.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Row(
+            children: [
+              const Icon(Icons.info_outline, color: Colors.white),
+              const SizedBox(width: 8),
+              const Expanded(child: Text('Enter your email to receive a magic link.')),
+            ],
+          ),
+          backgroundColor: Colors.blue,
+          behavior: SnackBarBehavior.floating,
+          duration: const Duration(seconds: 3),
+        ),
+      );
+      return;
+    }
+
+    await ref.read(authStateProvider.notifier).sendMagicLink(email);
+    _statusShown = false;
   }
 
   Future<void> _handleWalletConnect() async {
     final success = await ref.read(authStateProvider.notifier).connectWallet();
 
-    if (success && mounted) {
+    if (!mounted) return;
+
+    if (success) {
+      // Wallet connection successful - navigate to home
       context.go('/');
     } else {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text(ref.read(authStateProvider).error ?? 'Wallet connection failed'),
-            backgroundColor: Colors.red,
+      // Wallet connection failed - show error message
+      final errorMessage = ref.read(authStateProvider).error ?? 'Wallet connection failed. Please try again.';
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Row(
+            children: [
+              const Icon(Icons.error_outline, color: Colors.white),
+              const SizedBox(width: 8),
+              Expanded(child: Text(errorMessage)),
+            ],
           ),
-        );
-      }
+          backgroundColor: Colors.red,
+          behavior: SnackBarBehavior.floating,
+          duration: const Duration(seconds: 5),
+        ),
+      );
+      ref.read(authStateProvider.notifier).clearErrorMessage();
     }
   }
 
   @override
   Widget build(BuildContext context) {
     final authState = ref.watch(authStateProvider);
+    
+    // Show status messages (success messages)
+    if (authState.statusMessage != null && !_statusShown) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (!mounted) return;
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Row(
+              children: [
+                const Icon(Icons.check_circle, color: Colors.white),
+                const SizedBox(width: 8),
+                Expanded(child: Text(authState.statusMessage!)),
+              ],
+            ),
+            backgroundColor: Colors.green,
+            behavior: SnackBarBehavior.floating,
+            duration: const Duration(seconds: 4),
+          ),
+        );
+        ref.read(authStateProvider.notifier).clearStatusMessage();
+        _statusShown = true;
+      });
+    } else if (authState.statusMessage == null) {
+      _statusShown = false;
+    }
+    
+    // Show error messages
+    if (authState.error != null && !_statusShown) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (!mounted) return;
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Row(
+              children: [
+                const Icon(Icons.error_outline, color: Colors.white),
+                const SizedBox(width: 8),
+                Expanded(child: Text(authState.error!)),
+              ],
+            ),
+            backgroundColor: Colors.red,
+            behavior: SnackBarBehavior.floating,
+            duration: const Duration(seconds: 5),
+          ),
+        );
+        ref.read(authStateProvider.notifier).clearErrorMessage();
+        _statusShown = true;
+      });
+    }
 
     return Scaffold(
       body: SafeArea(
@@ -139,8 +260,8 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                       if (value == null || value.isEmpty) {
                         return 'Please enter your password';
                       }
-                      if (value.length < 6) {
-                        return 'Password must be at least 6 characters';
+                      if (value.length < 8) {
+                        return 'Password must be at least 8 characters';
                       }
                       return null;
                     },
@@ -159,6 +280,23 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                         : const Text('Login'),
                   ),
                   const SizedBox(height: 16),
+
+                  Align(
+                    alignment: Alignment.centerRight,
+                    child: TextButton(
+                      onPressed: authState.isLoading ? null : _handlePasswordReset,
+                      child: const Text('Forgot password?'),
+                    ),
+                  ),
+
+                  Align(
+                    alignment: Alignment.centerRight,
+                    child: TextButton(
+                      onPressed: authState.isLoading ? null : _handleMagicLink,
+                      child: const Text('Send me a magic link'),
+                    ),
+                  ),
+                  const SizedBox(height: 8),
 
                   // Divider
                   Row(

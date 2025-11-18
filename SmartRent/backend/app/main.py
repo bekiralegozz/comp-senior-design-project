@@ -9,7 +9,8 @@ from contextlib import asynccontextmanager
 import uvicorn
 
 from app.core.config import settings
-from app.api.routes import assets, rentals, users
+from app.core.middleware import SupabaseAuthMiddleware
+from app.api.routes import assets, auth, rentals, users
 
 
 @asynccontextmanager
@@ -35,13 +36,30 @@ app = FastAPI(
 )
 
 # Configure CORS
+# In development, allow all localhost origins (for Flutter web random ports)
+if settings.ENVIRONMENT == "development":
+    # Allow all localhost and 127.0.0.1 origins for development
+    cors_kwargs = {
+        "allow_origin_regex": r"http://localhost:\d+|http://127\.0\.0\.1:\d+",
+        "allow_credentials": True,
+        "allow_methods": ["*"],
+        "allow_headers": ["*"],
+    }
+else:
+    cors_kwargs = {
+        "allow_origins": settings.ALLOWED_ORIGINS,
+        "allow_credentials": True,
+        "allow_methods": ["*"],
+        "allow_headers": ["*"],
+    }
+
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=settings.ALLOWED_ORIGINS,
-    allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
+    **cors_kwargs
 )
+
+# Attach Supabase auth middleware (non-blocking by default)
+app.add_middleware(SupabaseAuthMiddleware)
 
 # Health check endpoint
 @app.get("/ping")
@@ -64,8 +82,9 @@ async def root():
     }
 
 # Include API routers
+app.include_router(auth.router)
 app.include_router(assets.router, prefix="/api/v1/assets", tags=["Assets"])
-app.include_router(rentals.router, prefix="/api/v1/rentals", tags=["Rentals"])  
+app.include_router(rentals.router, prefix="/api/v1/rentals", tags=["Rentals"])
 app.include_router(users.router, prefix="/api/v1/users", tags=["Users"])
 
 
