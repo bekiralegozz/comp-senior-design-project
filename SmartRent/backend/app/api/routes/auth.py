@@ -137,27 +137,39 @@ async def _upsert_profile(
     wallet_address: Optional[str] = None,
     avatar_url: Optional[str] = None,
 ) -> None:
-    """Insert or update profile into Supabase profiles table.
+    """Insert profile into Supabase profiles table.
     
-    Note: This requires the user to exist in auth.users first (created by signup).
-    Uses service_role to bypass RLS policies.
+    This function inserts a new profile record into the public.profiles table.
+    Uses service_role to bypass RLS policies and ensure insertion succeeds.
+    
+    Args:
+        user_id: UUID of the user (must exist in auth.users)
+        email: User's email address
+        full_name: User's full name (optional)
+        wallet_address: User's wallet address (optional)
+        avatar_url: User's avatar URL (optional)
+    
+    Raises:
+        HTTPException: If profile insertion fails
     """
     import logging
     logger = logging.getLogger(__name__)
     
-    # Ensure we're using service_role client to bypass RLS
+    # CRITICAL: Use service_role client to bypass RLS policies
+    # This is required because RLS policies may prevent inserts from anon key
     client = get_supabase_client(use_service_role=True)
     
     # Build payload according to profiles table schema
+    # All fields match the database schema you provided
     payload: Dict[str, Any] = {
-        "id": str(user_id),
-        "email": email,  # Can be nullable per schema, but we have it from signup
-        "full_name": full_name,
-        "auth_provider": "email",
-        "is_onboarded": False,
+        "id": str(user_id),  # Primary key, references auth.users.id
+        "email": email,  # User's email
+        "full_name": full_name,  # Optional full name
+        "auth_provider": "email",  # Default auth provider
+        "is_onboarded": False,  # Default onboarding status
     }
     
-    # Add optional fields only if provided
+    # Add optional fields only if provided (don't send None values)
     if wallet_address:
         payload["wallet_address"] = wallet_address
     if avatar_url:
@@ -166,17 +178,19 @@ async def _upsert_profile(
     table = client.table("profiles")
     
     try:
-        # First, try to insert (profile shouldn't exist during signup)
-        # Use insert with ignore_duplicates=False to get proper error if exists
+        # First, try INSERT (profile shouldn't exist during signup)
+        logger.info(f"Attempting to insert profile for user {user_id}")
         response = await _call_supabase(
             table.insert(payload).execute
         )
         
-        # Verify the response
+        # Verify the response contains data
         if hasattr(response, 'data') and response.data:
-            logger.info(f"Successfully inserted profile for user {user_id}")
+            logger.info(f"✅ Successfully inserted profile for user {user_id}")
+            return
         else:
             logger.warning(f"Insert returned no data for user {user_id}, but no error raised")
+            # If no data but no error, assume success and continue
             
     except Exception as insert_error:
         # If insert fails (e.g., profile already exists), try upsert
@@ -185,27 +199,31 @@ async def _upsert_profile(
         
         try:
             # Use upsert as fallback (in case profile was created elsewhere)
-            # on_conflict should match the primary key (id)
+            # on_conflict="id" means update if id already exists
+            logger.info(f"Attempting to upsert profile for user {user_id}")
             response = await _call_supabase(
                 table.upsert(payload, on_conflict="id").execute
             )
             
             if hasattr(response, 'data') and response.data:
-                logger.info(f"Successfully upserted profile for user {user_id}")
+                logger.info(f"✅ Successfully upserted profile for user {user_id}")
+                return
             else:
                 logger.warning(f"Upsert returned no data for user {user_id}")
+                # If no data but no error, assume success
+                return
                 
         except Exception as upsert_error:
-            # Both insert and upsert failed
+            # Both insert and upsert failed - this is a critical error
             upsert_error_msg = str(upsert_error)
             logger.error(
-                f"Both insert and upsert failed for user {user_id}. "
+                f"❌ Both insert and upsert failed for user {user_id}. "
                 f"Insert error: {error_msg}. Upsert error: {upsert_error_msg}"
             )
             # Re-raise to be handled by caller
             raise HTTPException(
                 status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-                detail=f"Failed to create profile: {upsert_error_msg}"
+                detail=f"Failed to create profile in database: {upsert_error_msg}"
             ) from upsert_error
 
 
