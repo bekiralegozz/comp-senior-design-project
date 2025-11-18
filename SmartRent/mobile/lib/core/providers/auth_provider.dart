@@ -235,13 +235,29 @@ class AuthNotifier extends StateNotifier<AuthState> {
 
   Future<void> logout() async {
     await _ensureInitialized();
+    state = state.copyWith(
+      isLoading: true,
+      errorRemoved: true,
+      statusMessageRemoved: true,
+    );
     try {
       final prefs = await SharedPreferences.getInstance();
       await prefs.remove('wallet_address');
-      await _apiService.logout(refreshToken: state.refreshToken);
-      state = const AuthState();
+      // Try to logout from backend, but don't fail if it errors
+      // Session will be cleared locally regardless
+      try {
+        await _apiService.logout(refreshToken: state.refreshToken);
+      } catch (e) {
+        // Log but don't fail - session will be cleared anyway
+        // This handles network errors gracefully
+      }
+      // Always clear state and show success
+      state = const AuthState(
+        statusMessage: 'Logged out successfully',
+      );
     } catch (e) {
-      state = state.copyWith(error: e.toString());
+      // Even if something goes wrong, clear the state
+      state = const AuthState();
     }
   }
 

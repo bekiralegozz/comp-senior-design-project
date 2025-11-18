@@ -7,6 +7,7 @@ import '../constants/config.dart';
 import '../services/models.dart';
 import '../services/api_service.dart';
 import '../components/asset_card.dart';
+import '../core/providers/auth_provider.dart';
 
 /// Provider for featured assets
 final featuredAssetsProvider = FutureProvider<List<Asset>>((ref) async {
@@ -80,6 +81,65 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
                 const SnackBar(content: Text('Wallet features coming soon!')),
               );
             },
+          ),
+          PopupMenuButton<String>(
+            icon: const Icon(Icons.more_vert),
+            onSelected: (value) async {
+              if (value == 'logout') {
+                final confirm = await showDialog<bool>(
+                  context: context,
+                  builder: (context) => AlertDialog(
+                    title: const Text('Logout'),
+                    content: const Text('Are you sure you want to logout?'),
+                    actions: [
+                      TextButton(
+                        onPressed: () => Navigator.of(context).pop(false),
+                        child: const Text('Cancel'),
+                      ),
+                      TextButton(
+                        onPressed: () => Navigator.of(context).pop(true),
+                        style: TextButton.styleFrom(
+                          foregroundColor: Colors.red,
+                        ),
+                        child: const Text('Logout'),
+                      ),
+                    ],
+                  ),
+                );
+
+                if (confirm == true && mounted) {
+                  await ref.read(authStateProvider.notifier).logout();
+                  if (mounted) {
+                    context.go('/auth/login');
+                  }
+                }
+              } else if (value == 'settings') {
+                context.go('/settings');
+              }
+            },
+            itemBuilder: (context) => [
+              const PopupMenuItem(
+                value: 'settings',
+                child: Row(
+                  children: [
+                    Icon(Icons.settings_outlined, size: 20),
+                    SizedBox(width: 8),
+                    Text('Settings'),
+                  ],
+                ),
+              ),
+              const PopupMenuDivider(),
+              const PopupMenuItem(
+                value: 'logout',
+                child: Row(
+                  children: [
+                    Icon(Icons.logout, size: 20, color: Colors.red),
+                    SizedBox(width: 8),
+                    Text('Logout', style: TextStyle(color: Colors.red)),
+                  ],
+                ),
+              ),
+            ],
           ),
         ],
       ),

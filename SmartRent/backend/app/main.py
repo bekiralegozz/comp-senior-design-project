@@ -36,12 +36,26 @@ app = FastAPI(
 )
 
 # Configure CORS
+# In development, allow all localhost origins (for Flutter web random ports)
+if settings.ENVIRONMENT == "development":
+    # Allow all localhost and 127.0.0.1 origins for development
+    cors_kwargs = {
+        "allow_origin_regex": r"http://localhost:\d+|http://127\.0\.0\.1:\d+",
+        "allow_credentials": True,
+        "allow_methods": ["*"],
+        "allow_headers": ["*"],
+    }
+else:
+    cors_kwargs = {
+        "allow_origins": settings.ALLOWED_ORIGINS,
+        "allow_credentials": True,
+        "allow_methods": ["*"],
+        "allow_headers": ["*"],
+    }
+
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=settings.ALLOWED_ORIGINS,
-    allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
+    **cors_kwargs
 )
 
 # Attach Supabase auth middleware (non-blocking by default)

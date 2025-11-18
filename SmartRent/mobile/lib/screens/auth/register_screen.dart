@@ -48,39 +48,86 @@ class _RegisterScreenState extends ConsumerState<RegisterScreen> {
               : _avatarUrlController.text.trim(),
         );
 
-    if (success && mounted) {
-      final message = ref.read(authStateProvider).statusMessage ??
+    if (!mounted) return;
+
+    final authState = ref.read(authStateProvider);
+
+    if (success) {
+      // Registration successful - show success message and navigate to login
+      final message = authState.statusMessage ??
           'Registration successful. Please verify your email.';
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text(message)),
+        SnackBar(
+          content: Row(
+            children: [
+              const Icon(Icons.check_circle, color: Colors.white),
+              const SizedBox(width: 8),
+              Expanded(child: Text(message)),
+            ],
+          ),
+          backgroundColor: Colors.green,
+          behavior: SnackBarBehavior.floating,
+          duration: const Duration(seconds: 4),
+        ),
       );
       ref.read(authStateProvider.notifier).clearStatusMessage();
-      context.go('/auth/login');
+      // Navigate to login screen after a short delay
+      Future.delayed(const Duration(milliseconds: 500), () {
+        if (mounted) {
+          context.go('/auth/login');
+        }
+      });
     } else {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text(ref.read(authStateProvider).error ?? 'Registration failed'),
-            backgroundColor: Colors.red,
+      // Registration failed - show error, clear only password fields, stay on register screen
+      final errorMessage = authState.error ?? 'Registration failed. Please try again.';
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Row(
+            children: [
+              const Icon(Icons.error_outline, color: Colors.white),
+              const SizedBox(width: 8),
+              Expanded(child: Text(errorMessage)),
+            ],
           ),
-        );
-      }
+          backgroundColor: Colors.red,
+          behavior: SnackBarBehavior.floating,
+          duration: const Duration(seconds: 5),
+        ),
+      );
+      // Clear only password fields, keep other fields
+      _passwordController.clear();
+      _confirmPasswordController.clear();
+      // Clear error from state after showing
+      ref.read(authStateProvider.notifier).clearErrorMessage();
     }
   }
 
   @override
   Widget build(BuildContext context) {
     final authState = ref.watch(authStateProvider);
-    if (authState.statusMessage != null && !_statusShown) {
+    
+    // Show error messages from auth state (e.g., from other sources)
+    if (authState.error != null && !_statusShown) {
       WidgetsBinding.instance.addPostFrameCallback((_) {
         if (!mounted) return;
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text(authState.statusMessage!)),
+          SnackBar(
+            content: Row(
+              children: [
+                const Icon(Icons.error_outline, color: Colors.white),
+                const SizedBox(width: 8),
+                Expanded(child: Text(authState.error!)),
+              ],
+            ),
+            backgroundColor: Colors.red,
+            behavior: SnackBarBehavior.floating,
+            duration: const Duration(seconds: 5),
+          ),
         );
-        ref.read(authStateProvider.notifier).clearStatusMessage();
+        ref.read(authStateProvider.notifier).clearErrorMessage();
         _statusShown = true;
       });
-    } else if (authState.statusMessage == null) {
+    } else if (authState.error == null && authState.statusMessage == null) {
       _statusShown = false;
     }
 
@@ -165,8 +212,8 @@ class _RegisterScreenState extends ConsumerState<RegisterScreen> {
                     if (value == null || value.isEmpty) {
                       return 'Please enter your password';
                     }
-                    if (value.length < 6) {
-                      return 'Password must be at least 6 characters';
+                    if (value.length < 8) {
+                      return 'Password must be at least 8 characters';
                     }
                     return null;
                   },

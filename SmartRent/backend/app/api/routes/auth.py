@@ -91,7 +91,43 @@ async def _call_supabase(func, *args, **kwargs):
     try:
         return await anyio.to_thread.run_sync(lambda: func(*args, **kwargs))
     except Exception as exc:  # pragma: no cover - SDK raises varied errors
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc
+        # Parse Supabase error messages for better user feedback
+        error_str = str(exc)
+        error_detail = _parse_supabase_error(error_str)
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=error_detail) from exc
+
+
+def _parse_supabase_error(error_str: str) -> str:
+    """Parse Supabase error messages and return user-friendly messages."""
+    error_lower = error_str.lower()
+    
+    # Email verification errors
+    if "email not confirmed" in error_lower or "email_not_confirmed" in error_lower:
+        return "Please verify your email address before signing in. Check your inbox for the confirmation link."
+    
+    if "unverified email" in error_lower or "unverified_email" in error_lower:
+        return "Your email address has not been verified. Please check your inbox and click the confirmation link."
+    
+    # Invalid credentials errors
+    if "invalid login credentials" in error_lower or "invalid_credentials" in error_lower:
+        return "Invalid email or password. Please check your credentials and try again."
+    
+    if "invalid password" in error_lower or "wrong password" in error_lower:
+        return "Invalid password. Please check your password and try again."
+    
+    if "user not found" in error_lower or "user_not_found" in error_lower:
+        return "No account found with this email address. Please check your email or sign up."
+    
+    # JWT/Token errors
+    if "jwt expired" in error_lower or "token expired" in error_lower:
+        return "Your session has expired. Please sign in again."
+    
+    # Rate limiting
+    if "too many requests" in error_lower or "rate limit" in error_lower:
+        return "Too many requests. Please wait a moment and try again."
+    
+    # Return original error if no specific pattern matches
+    return error_str
 
 
 async def _upsert_profile(
@@ -128,30 +164,27 @@ async def _upsert_profile(
             import logging
             logger = logging.getLogger(__name__)
             logger.warning(f"Upsert returned no data for user {user_id}")
-    except Exception as upsert_error:
+    except (HTTPException, Exception) as upsert_error:
         # Try insert as fallback if upsert fails
         import logging
         logger = logging.getLogger(__name__)
-        logger.warning(f"Upsert failed for user {user_id}, trying insert: {str(upsert_error)}")
+        error_msg = str(upsert_error)
+        if isinstance(upsert_error, HTTPException):
+            error_msg = upsert_error.detail if hasattr(upsert_error, 'detail') else str(upsert_error)
+        logger.warning(f"Upsert failed for user {user_id}, trying insert: {error_msg}")
         try:
             response = await _call_supabase(
                 table.insert(payload).execute
             )
-        except Exception as insert_error:
-            logger.error(f"Both upsert and insert failed for user {user_id}: {str(insert_error)}")
+        except (HTTPException, Exception) as insert_error:
+            # Both upsert and insert failed - log and re-raise
+            # This will be caught by the caller and won't fail the signup
+            insert_error_msg = str(insert_error)
+            if isinstance(insert_error, HTTPException):
+                insert_error_msg = insert_error.detail if hasattr(insert_error, 'detail') else str(insert_error)
+            logger.error(f"Both upsert and insert failed for user {user_id}: {insert_error_msg}")
+            # Re-raise to be handled by caller
             raise
-    except HTTPException as e:
-        # Re-raise HTTP exceptions
-        raise
-    except Exception as e:
-        # Log and re-raise other exceptions
-        import logging
-        logger = logging.getLogger(__name__)
-        logger.error(f"Failed to upsert profile for user {user_id}: {str(e)}")
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Failed to create profile: {str(e)}"
-        ) from e
 
 
 async def _fetch_profile(user_id: UUID) -> Optional[ProfilePayload]:
@@ -271,6 +304,7 @@ async def signup(payload: SignupRequest) -> SignupResponse:
     user_id = UUID(str(getattr(user, "id", "")))
 
     # Upsert profile - this must happen after user is created in auth.users
+    # Note: Profile creation failure should not fail the signup since user is already created
     try:
         await _upsert_profile(
             user_id,
@@ -279,16 +313,17 @@ async def signup(payload: SignupRequest) -> SignupResponse:
             wallet_address=payload.wallet_address,
             avatar_url=payload.avatar_url,
         )
-    except HTTPException:
-        # Re-raise HTTP exceptions
-        raise
-    except Exception as e:
+    except (HTTPException, Exception) as e:
         # If profile creation fails, log but don't fail the signup
-        # The user is already created in auth.users
+        # The user is already created in auth.users and can sign in
+        # Profile can be created later (e.g., on first login or via profile update)
         import logging
         logger = logging.getLogger(__name__)
+        error_msg = str(e)
+        if isinstance(e, HTTPException):
+            error_msg = e.detail if hasattr(e, 'detail') else str(e)
         logger.warning(
-            f"User {user_id} created in auth.users but profile creation failed: {str(e)}. "
+            f"User {user_id} created in auth.users but profile creation failed: {error_msg}. "
             "Profile can be created later."
         )
         # Continue - user can still sign in and profile can be created on first login
@@ -301,16 +336,29 @@ async def signup(payload: SignupRequest) -> SignupResponse:
 async def login(payload: LoginRequest, response: Response) -> LoginResponse:
     client = get_supabase_client()
 
-    result = await _call_supabase(
-        client.auth.sign_in_with_password,
-        {"email": payload.email, "password": payload.password},
-    )
-
+    try:
+        result = await _call_supabase(
+            client.auth.sign_in_with_password,
+            {"email": payload.email, "password": payload.password},
+        )
+    except HTTPException as e:
+        # Re-raise with the parsed error message from _call_supabase
+        raise
+    
     session = getattr(result, "session", None)
     user = getattr(result, "user", None)
 
     if not session or not user:
-        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid credentials or unverified email")
+        # Check if user exists but email is not confirmed
+        if user and getattr(user, "email_confirmed_at", None) is None:
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail="Please verify your email address before signing in. Check your inbox for the confirmation link."
+            )
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Invalid email or password. Please check your credentials and try again."
+        )
 
     access_token = getattr(session, "access_token", None)
     refresh_token = getattr(session, "refresh_token", None)
