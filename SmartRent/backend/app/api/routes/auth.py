@@ -137,54 +137,76 @@ async def _upsert_profile(
     wallet_address: Optional[str] = None,
     avatar_url: Optional[str] = None,
 ) -> None:
-    """Upsert profile into Supabase profiles table.
+    """Insert or update profile into Supabase profiles table.
     
     Note: This requires the user to exist in auth.users first (created by signup).
+    Uses service_role to bypass RLS policies.
     """
-    client = get_supabase_client()
+    import logging
+    logger = logging.getLogger(__name__)
+    
+    # Ensure we're using service_role client to bypass RLS
+    client = get_supabase_client(use_service_role=True)
+    
+    # Build payload according to profiles table schema
     payload: Dict[str, Any] = {
         "id": str(user_id),
-        "email": email,
+        "email": email,  # Can be nullable per schema, but we have it from signup
         "full_name": full_name,
         "auth_provider": "email",
-        "wallet_address": wallet_address,
-        "avatar_url": avatar_url,
         "is_onboarded": False,
     }
-    # Remove None values but keep False for is_onboarded
-    payload = {k: v for k, v in payload.items() if v is not None}
+    
+    # Add optional fields only if provided
+    if wallet_address:
+        payload["wallet_address"] = wallet_address
+    if avatar_url:
+        payload["avatar_url"] = avatar_url
+    
     table = client.table("profiles")
+    
     try:
-        # Use upsert with on_conflict parameter
+        # First, try to insert (profile shouldn't exist during signup)
+        # Use insert with ignore_duplicates=False to get proper error if exists
         response = await _call_supabase(
-            table.upsert(payload, on_conflict="id").execute
+            table.insert(payload).execute
         )
+        
         # Verify the response
-        if not hasattr(response, 'data') or not response.data:
-            import logging
-            logger = logging.getLogger(__name__)
-            logger.warning(f"Upsert returned no data for user {user_id}")
-    except (HTTPException, Exception) as upsert_error:
-        # Try insert as fallback if upsert fails
-        import logging
-        logger = logging.getLogger(__name__)
-        error_msg = str(upsert_error)
-        if isinstance(upsert_error, HTTPException):
-            error_msg = upsert_error.detail if hasattr(upsert_error, 'detail') else str(upsert_error)
-        logger.warning(f"Upsert failed for user {user_id}, trying insert: {error_msg}")
+        if hasattr(response, 'data') and response.data:
+            logger.info(f"Successfully inserted profile for user {user_id}")
+        else:
+            logger.warning(f"Insert returned no data for user {user_id}, but no error raised")
+            
+    except Exception as insert_error:
+        # If insert fails (e.g., profile already exists), try upsert
+        error_msg = str(insert_error)
+        logger.warning(f"Insert failed for user {user_id}, trying upsert: {error_msg}")
+        
         try:
+            # Use upsert as fallback (in case profile was created elsewhere)
+            # on_conflict should match the primary key (id)
             response = await _call_supabase(
-                table.insert(payload).execute
+                table.upsert(payload, on_conflict="id").execute
             )
-        except (HTTPException, Exception) as insert_error:
-            # Both upsert and insert failed - log and re-raise
-            # This will be caught by the caller and won't fail the signup
-            insert_error_msg = str(insert_error)
-            if isinstance(insert_error, HTTPException):
-                insert_error_msg = insert_error.detail if hasattr(insert_error, 'detail') else str(insert_error)
-            logger.error(f"Both upsert and insert failed for user {user_id}: {insert_error_msg}")
+            
+            if hasattr(response, 'data') and response.data:
+                logger.info(f"Successfully upserted profile for user {user_id}")
+            else:
+                logger.warning(f"Upsert returned no data for user {user_id}")
+                
+        except Exception as upsert_error:
+            # Both insert and upsert failed
+            upsert_error_msg = str(upsert_error)
+            logger.error(
+                f"Both insert and upsert failed for user {user_id}. "
+                f"Insert error: {error_msg}. Upsert error: {upsert_error_msg}"
+            )
             # Re-raise to be handled by caller
-            raise
+            raise HTTPException(
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                detail=f"Failed to create profile: {upsert_error_msg}"
+            ) from upsert_error
 
 
 async def _fetch_profile(user_id: UUID) -> Optional[ProfilePayload]:
@@ -303,8 +325,13 @@ async def signup(payload: SignupRequest) -> SignupResponse:
 
     user_id = UUID(str(getattr(user, "id", "")))
 
-    # Upsert profile - this must happen after user is created in auth.users
+    # Insert profile into public.profiles table
+    # This must happen after user is created in auth.users
     # Note: Profile creation failure should not fail the signup since user is already created
+    # However, we should try hard to create it as it's required for the app to work properly
+    import logging
+    logger = logging.getLogger(__name__)
+    
     try:
         await _upsert_profile(
             user_id,
@@ -313,18 +340,17 @@ async def signup(payload: SignupRequest) -> SignupResponse:
             wallet_address=payload.wallet_address,
             avatar_url=payload.avatar_url,
         )
+        logger.info(f"Successfully created profile for user {user_id} during signup")
     except (HTTPException, Exception) as e:
-        # If profile creation fails, log but don't fail the signup
+        # If profile creation fails, log the error but don't fail the signup
         # The user is already created in auth.users and can sign in
-        # Profile can be created later (e.g., on first login or via profile update)
-        import logging
-        logger = logging.getLogger(__name__)
+        # Profile can be created later (e.g., on first login or via profile update endpoint)
         error_msg = str(e)
         if isinstance(e, HTTPException):
             error_msg = e.detail if hasattr(e, 'detail') else str(e)
-        logger.warning(
+        logger.error(
             f"User {user_id} created in auth.users but profile creation failed: {error_msg}. "
-            "Profile can be created later."
+            "User can still sign in, but profile should be created on first login."
         )
         # Continue - user can still sign in and profile can be created on first login
 
@@ -370,8 +396,26 @@ async def login(payload: LoginRequest, response: Response) -> LoginResponse:
 
     user_id = UUID(str(getattr(user, "id", "")))
 
-    await _update_last_login(user_id)
+    # Fetch profile, create if it doesn't exist
     profile = await _fetch_profile(user_id)
+    if not profile:
+        # Profile doesn't exist, create it with basic info from auth.users
+        import logging
+        logger = logging.getLogger(__name__)
+        logger.info(f"Profile not found for user {user_id}, creating during login")
+        try:
+            user_email = getattr(user, "email", None) or payload.email
+            await _upsert_profile(
+                user_id,
+                user_email,
+                full_name=None,  # Will be set later via profile update
+            )
+            profile = await _fetch_profile(user_id)
+        except Exception as e:
+            logger.warning(f"Failed to create profile during login for user {user_id}: {str(e)}")
+            # Continue without profile - user can still login
+    
+    await _update_last_login(user_id)
 
     cookie_kwargs: Dict[str, Any] = {
         "httponly": True,
