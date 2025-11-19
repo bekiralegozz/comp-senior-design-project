@@ -85,18 +85,19 @@ class User {
 /// Asset model
 @JsonSerializable()
 class Asset {
-  final int id;
+  final String id;  // Changed from int to String for UUID support
   final String title;
   final String? description;
   final String category;
   final double pricePerDay;
   final String currency;
   final String? location;
-  final int ownerId;
+  final String ownerId;  // Changed from int to String for UUID support
   final int? tokenId;
   final String? contractAddress;
   final bool isAvailable;
   final String? iotDeviceId;
+  final String? imageUrl;  // Main image URL
   final DateTime createdAt;
   final DateTime? updatedAt;
   final User? owner;
@@ -114,6 +115,7 @@ class Asset {
     this.contractAddress,
     required this.isAvailable,
     this.iotDeviceId,
+    this.imageUrl,
     required this.createdAt,
     this.updatedAt,
     this.owner,
@@ -229,7 +231,7 @@ class CreateAssetRequest {
   final double pricePerDay;
   final String currency;
   final String? location;
-  final int ownerId;
+  final String ownerId;  // Changed from int to String for UUID support
   final String? iotDeviceId;
 
   CreateAssetRequest({

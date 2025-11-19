@@ -2,19 +2,21 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:intl/intl.dart';
+import 'package:cached_network_image/cached_network_image.dart';
 
 import '../constants/config.dart';
 import '../services/models.dart';
 import '../services/api_service.dart';
 
 /// Provider for asset details
-final assetDetailsProvider = FutureProvider.family<Asset, int>((ref, assetId) async {
+final assetDetailsProvider = FutureProvider.family<Asset, String>((ref, assetId) async {
   final apiService = ApiService();
+  await apiService.initialize();
   return await apiService.getAsset(assetId);
 });
 
 class AssetDetailsScreen extends ConsumerWidget {
-  final int assetId;
+  final String assetId;
 
   const AssetDetailsScreen({Key? key, required this.assetId}) : super(key: key);
 
@@ -58,27 +60,73 @@ class AssetDetailsScreen extends ConsumerWidget {
           expandedHeight: 300,
           pinned: true,
           flexibleSpace: FlexibleSpaceBar(
-            background: Container(
-              decoration: BoxDecoration(
-                gradient: LinearGradient(
-                  colors: [
-                    AppColors.categoryColors[asset.category]?.withOpacity(0.8) ?? 
-                    AppColors.primary.withOpacity(0.8),
-                    AppColors.categoryColors[asset.category]?.withOpacity(0.4) ?? 
-                    AppColors.primary.withOpacity(0.4),
-                  ],
-                  begin: Alignment.topCenter,
-                  end: Alignment.bottomCenter,
-                ),
-              ),
-              child: const Center(
-                child: Icon(
-                  Icons.image,
-                  size: 80,
-                  color: Colors.white,
-                ),
-              ),
-            ),
+            background: asset.imageUrl != null && asset.imageUrl!.isNotEmpty
+                ? CachedNetworkImage(
+                    imageUrl: asset.imageUrl!,
+                    width: double.infinity,
+                    fit: BoxFit.cover,
+                    placeholder: (context, url) => Container(
+                      decoration: BoxDecoration(
+                        gradient: LinearGradient(
+                          colors: [
+                            AppColors.categoryColors[asset.category]?.withOpacity(0.8) ?? 
+                            AppColors.primary.withOpacity(0.8),
+                            AppColors.categoryColors[asset.category]?.withOpacity(0.4) ?? 
+                            AppColors.primary.withOpacity(0.4),
+                          ],
+                          begin: Alignment.topCenter,
+                          end: Alignment.bottomCenter,
+                        ),
+                      ),
+                      child: const Center(
+                        child: CircularProgressIndicator(
+                          valueColor: AlwaysStoppedAnimation<Color>(Colors.white70),
+                        ),
+                      ),
+                    ),
+                    errorWidget: (context, url, error) => Container(
+                      decoration: BoxDecoration(
+                        gradient: LinearGradient(
+                          colors: [
+                            AppColors.categoryColors[asset.category]?.withOpacity(0.8) ?? 
+                            AppColors.primary.withOpacity(0.8),
+                            AppColors.categoryColors[asset.category]?.withOpacity(0.4) ?? 
+                            AppColors.primary.withOpacity(0.4),
+                          ],
+                          begin: Alignment.topCenter,
+                          end: Alignment.bottomCenter,
+                        ),
+                      ),
+                      child: const Center(
+                        child: Icon(
+                          Icons.image_not_supported,
+                          size: 80,
+                          color: Colors.white70,
+                        ),
+                      ),
+                    ),
+                  )
+                : Container(
+                    decoration: BoxDecoration(
+                      gradient: LinearGradient(
+                        colors: [
+                          AppColors.categoryColors[asset.category]?.withOpacity(0.8) ?? 
+                          AppColors.primary.withOpacity(0.8),
+                          AppColors.categoryColors[asset.category]?.withOpacity(0.4) ?? 
+                          AppColors.primary.withOpacity(0.4),
+                        ],
+                        begin: Alignment.topCenter,
+                        end: Alignment.bottomCenter,
+                      ),
+                    ),
+                    child: const Center(
+                      child: Icon(
+                        Icons.image,
+                        size: 80,
+                        color: Colors.white,
+                      ),
+                    ),
+                  ),
           ),
           actions: [
             IconButton(
@@ -184,7 +232,7 @@ class AssetDetailsScreen extends ConsumerWidget {
           textBaseline: TextBaseline.alphabetic,
           children: [
             Text(
-              '${asset.pricePerDay} ${asset.currency}',
+              '${asset.pricePerDay} ${asset.currency == "USD" ? "token" : asset.currency}',
               style: theme.textTheme.headlineMedium?.copyWith(
                 color: AppColors.primary,
                 fontWeight: FontWeight.bold,
@@ -294,7 +342,7 @@ class AssetDetailsScreen extends ConsumerWidget {
         const SizedBox(height: AppSpacing.md),
         _buildDetailRow(theme, 'Asset ID', '#${asset.id}'),
         _buildDetailRow(theme, 'Category', AssetCategories.getDisplayName(asset.category)),
-        _buildDetailRow(theme, 'Currency', asset.currency),
+        _buildDetailRow(theme, 'Currency', asset.currency == "USD" ? "token" : asset.currency),
         if (asset.tokenId != null)
           _buildDetailRow(theme, 'NFT Token ID', '#${asset.tokenId}'),
         if (asset.iotDeviceId != null)
@@ -465,7 +513,7 @@ class _BottomRentBar extends StatelessWidget {
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Text(
-                    '${asset.pricePerDay} ${asset.currency}/day',
+                    '${asset.pricePerDay} ${asset.currency == "USD" ? "token" : asset.currency}/day',
                     style: theme.textTheme.titleLarge?.copyWith(
                       fontWeight: FontWeight.bold,
                       color: AppColors.primary,

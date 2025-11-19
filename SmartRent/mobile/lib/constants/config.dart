@@ -188,6 +188,7 @@ class AppDurations {
 /// Asset categories
 class AssetCategories {
   static const List<String> all = [
+    'housing',
     'vehicles',
     'electronics',
     'tools',
@@ -199,6 +200,7 @@ class AssetCategories {
   ];
   
   static const Map<String, IconData> icons = {
+    'housing': Icons.home,
     'vehicles': Icons.directions_car,
     'electronics': Icons.devices,
     'tools': Icons.build,
@@ -211,6 +213,8 @@ class AssetCategories {
   
   static String getDisplayName(String category) {
     switch (category.toLowerCase()) {
+      case 'housing':
+        return 'Housing';
       case 'vehicles':
         return 'Vehicles';
       case 'electronics':

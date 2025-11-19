@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 
 class CreateRentalScreen extends StatelessWidget {
-  final int assetId;
+  final String assetId;
 
   const CreateRentalScreen({
     Key? key,
