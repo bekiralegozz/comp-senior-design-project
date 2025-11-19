@@ -1,0 +1,73 @@
+<!DOCTYPE html>
+<html lang="tr">
+<head>
+    <meta charset="UTF-8">
+    <title>SmartRent - Basit Test</title>
+    <script src="https://cdn.ethers.io/lib/ethers-5.7.umd.min.js"></script>
+</head>
+<body>
+    <h1>SmartRent - Basit Transaction Testi</h1>
+    <button onclick="testTransaction()">Bina Oluştur (Transaction Test)</button>
+    <div id="result"></div>
+
+    <script>
+        const CONTRACT_ADDRESS = "0x3cEC87F04c7E01fE1151d115f7F8C692fb85A767";
+        const CONTRACT_ABI = [
+            "function createBuilding(string memory name, string memory description, string memory location, uint256 totalShares, uint256 pricePerShare, uint256 rentalPricePerDay) external returns (uint256)",
+            "event BuildingCreated(uint256 indexed buildingId, string name, address indexed tokenAddress, address indexed creator, uint256 totalShares, uint256 pricePerShare)"
+        ];
+
+        async function testTransaction() {
+            try {
+                // MetaMask'e bağlan
+                if (typeof window.ethereum === 'undefined') {
+                    alert('MetaMask bulunamadı!');
+                    return;
+                }
+
+                await window.ethereum.request({ method: 'eth_requestAccounts' });
+                const provider = new ethers.providers.Web3Provider(window.ethereum);
+                const signer = provider.getSigner();
+                const contract = new ethers.Contract(CONTRACT_ADDRESS, CONTRACT_ABI, signer);
+
+                document.getElementById('result').innerHTML = 'Transaction gönderiliyor... MetaMask\'ten onaylayın.';
+
+                // Bina oluştur
+                const tx = await contract.createBuilding(
+                    "Test Binası",
+                    "Basit test binası",
+                    "İstanbul",
+                    10000,  // 10000 pay
+                    ethers.utils.parseEther("1"),  // 1 ETH per share
+                    ethers.utils.parseEther("0.1")  // 0.1 ETH per day
+                );
+
+                document.getElementById('result').innerHTML = 'Transaction hash: ' + tx.hash + '<br>Bekleniyor...';
+
+                // Transaction'ın onaylanmasını bekle
+                const receipt = await tx.wait();
+                
+                // Event'i bul
+                const event = receipt.events.find(e => e.event === 'BuildingCreated');
+                
+                if (event) {
+                    document.getElementById('result').innerHTML = 
+                        '<h3 style="color: green;">✅ Transaction Başarılı!</h3>' +
+                        'Bina ID: ' + event.args.buildingId.toString() + '<br>' +
+                        'Token Adresi: ' + event.args.tokenAddress + '<br>' +
+                        'Transaction Hash: ' + receipt.transactionHash;
+                } else {
+                    document.getElementById('result').innerHTML = 
+                        '<h3 style="color: green;">✅ Transaction Başarılı!</h3>' +
+                        'Transaction Hash: ' + receipt.transactionHash;
+                }
+
+            } catch (error) {
+                document.getElementById('result').innerHTML = 
+                    '<h3 style="color: red;">❌ Hata:</h3>' + error.message;
+            }
+        }
+    </script>
+</body>
+</html>
+

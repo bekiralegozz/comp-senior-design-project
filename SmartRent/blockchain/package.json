@@ -1,23 +1,15 @@
 {
   "name": "smartrent-blockchain",
   "version": "1.0.0",
-  "description": "Smart contracts for SmartRent blockchain-enabled rental platform",
+  "description": "Smart contracts for SmartRent blockchain-enabled rental platform with building investment system",
   "main": "index.js",
   "scripts": {
-    "compile": "npx hardhat compile",
-    "test": "npx hardhat test",
-    "deploy": "npx hardhat run scripts/deploy.js",
-    "deploy:testnet": "npx hardhat run scripts/deploy.js --network goerli",
-    "deploy:mainnet": "npx hardhat run scripts/deploy.js --network mainnet",
-    "verify": "npx hardhat verify",
-    "node": "npx hardhat node",
-    "clean": "npx hardhat clean",
-    "coverage": "npx hardhat coverage",
-    "size": "npx hardhat size-contracts",
-    "lint": "solhint 'contracts/**/*.sol'",
-    "lint:fix": "solhint 'contracts/**/*.sol' --fix",
-    "prettier": "prettier --write 'contracts/**/*.sol'",
-    "gas-report": "REPORT_GAS=true npx hardhat test"
+    "compile": "truffle compile",
+    "migrate": "truffle migrate",
+    "migrate:reset": "truffle migrate --reset",
+    "test": "truffle test",
+    "console": "truffle console",
+    "develop": "truffle develop"
   },
   "keywords": [
     "blockchain",
@@ -25,47 +17,20 @@
     "solidity",
     "smart-contracts",
     "rental",
-    "nft",
-    "defi"
+    "investment",
+    "buildings"
   ],
   "author": "SmartRent Team",
   "license": "MIT",
   "devDependencies": {
-    "@nomicfoundation/hardhat-toolbox": "^3.0.2",
-    "@nomiclabs/hardhat-ethers": "^2.2.3",
-    "@nomiclabs/hardhat-etherscan": "^3.1.7",
-    "@openzeppelin/hardhat-upgrades": "^1.28.0",
-    "hardhat": "^2.17.2",
-    "hardhat-contract-sizer": "^2.10.0",
-    "hardhat-gas-reporter": "^1.0.9",
-    "solidity-coverage": "^0.8.4",
-    "solhint": "^3.6.2",
-    "prettier": "^3.0.3",
-    "prettier-plugin-solidity": "^1.1.3"
+    "truffle": "^5.11.5",
+    "@truffle/hdwallet-provider": "^2.1.15"
   },
   "dependencies": {
     "@openzeppelin/contracts": "^4.9.3",
-    "@openzeppelin/contracts-upgradeable": "^4.9.3",
-    "dotenv": "^16.3.1",
-    "ethers": "^5.7.2"
+    "dotenv": "^16.3.1"
   },
   "engines": {
     "node": ">=16.0.0"
-  },
-  "repository": {
-    "type": "git",
-    "url": "https://github.com/smartrent/blockchain"
-  },
-  "bugs": {
-    "url": "https://github.com/smartrent/blockchain/issues"
-  },
-  "homepage": "https://github.com/smartrent/blockchain#readme"
+  }
 }
-
-
-
-
-
-
-
-
