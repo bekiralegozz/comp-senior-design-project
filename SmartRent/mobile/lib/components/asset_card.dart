@@ -38,26 +38,31 @@ class AssetCard extends StatelessWidget {
         ),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
+          mainAxisSize: MainAxisSize.min,
           children: [
             // Asset Image
             _buildAssetImage(theme),
             
             // Asset Details
             Padding(
-              padding: const EdgeInsets.all(AppSpacing.md),
+              padding: const EdgeInsets.symmetric(
+                horizontal: AppSpacing.sm,
+                vertical: AppSpacing.xs,
+              ),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
+                mainAxisSize: MainAxisSize.min,
                 children: [
                   // Title and Category
                   _buildTitleSection(theme),
                   
-                  const SizedBox(height: AppSpacing.sm),
+                  const SizedBox(height: 4),
                   
                   // Price
                   _buildPriceSection(theme),
                   
                   if (!compact) ...[
-                    const SizedBox(height: AppSpacing.sm),
+                    const SizedBox(height: 4),
                     
                     // Location
                     if (asset.location != null && asset.location!.isNotEmpty)
@@ -68,7 +73,7 @@ class AssetCard extends StatelessWidget {
                       _buildOwnerSection(theme),
                   ],
                   
-                  const SizedBox(height: AppSpacing.sm),
+                  const SizedBox(height: 4),
                   
                   // Status and Actions
                   _buildStatusSection(theme),
@@ -85,7 +90,7 @@ class AssetCard extends StatelessWidget {
     final categoryColor = AppColors.categoryColors[asset.category] ?? AppColors.primary;
     
     return Container(
-      height: compact ? 120 : 160,
+      height: compact ? 100 : 140,
       decoration: BoxDecoration(
         gradient: LinearGradient(
           colors: [
@@ -102,14 +107,49 @@ class AssetCard extends StatelessWidget {
       ),
       child: Stack(
         children: [
-          // Placeholder for actual image
-          const Center(
-            child: Icon(
-              Icons.image,
-              size: 48,
-              color: Colors.white,
+
+          // Actual image or placeholder
+          if (asset.imageUrl != null && asset.imageUrl!.isNotEmpty)
+            ClipRRect(
+              borderRadius: const BorderRadius.only(
+                topLeft: Radius.circular(AppRadius.md),
+                topRight: Radius.circular(AppRadius.md),
+              ),
+              child: CachedNetworkImage(
+                imageUrl: asset.imageUrl!,
+                width: double.infinity,
+                height: double.infinity,
+                fit: BoxFit.cover,
+                placeholder: (context, url) => Container(
+                  color: categoryColor.withOpacity(0.3),
+                  child: const Center(
+                    child: CircularProgressIndicator(
+                      strokeWidth: 2,
+                      valueColor: AlwaysStoppedAnimation<Color>(Colors.white70),
+                    ),
+                  ),
+                ),
+                errorWidget: (context, url, error) => Container(
+                  color: categoryColor.withOpacity(0.3),
+                  child: const Center(
+                    child: Icon(
+                      Icons.image_not_supported,
+                      size: 48,
+                      color: Colors.white70,
+                    ),
+                  ),
+                ),
+              ),
+            )
+          else
+            // Placeholder when no image
+            const Center(
+              child: Icon(
+                Icons.image,
+                size: 48,
+                color: Colors.white,
+              ),
             ),
-          ),
           
           // Availability badge
           Positioned(
@@ -177,6 +217,7 @@ class AssetCard extends StatelessWidget {
   Widget _buildTitleSection(ThemeData theme) {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
+      mainAxisSize: MainAxisSize.min,
       children: [
         Text(
           asset.title,
@@ -211,7 +252,7 @@ class AssetCard extends StatelessWidget {
         ),
         const SizedBox(width: AppSpacing.xs),
         Text(
-          '${asset.currency}/day',
+          '${asset.currency == "USD" ? "token" : asset.currency}/day',
           style: theme.textTheme.bodyMedium?.copyWith(
             color: AppColors.grey,
           ),
@@ -253,7 +294,7 @@ class AssetCard extends StatelessWidget {
 
   Widget _buildLocationSection(ThemeData theme) {
     return Padding(
-      padding: const EdgeInsets.only(bottom: AppSpacing.xs),
+      padding: const EdgeInsets.only(bottom: 2),
       child: Row(
         children: [
           Icon(
@@ -279,7 +320,7 @@ class AssetCard extends StatelessWidget {
 
   Widget _buildOwnerSection(ThemeData theme) {
     return Padding(
-      padding: const EdgeInsets.only(bottom: AppSpacing.xs),
+      padding: const EdgeInsets.only(bottom: 2),
       child: Row(
         children: [
           CircleAvatar(

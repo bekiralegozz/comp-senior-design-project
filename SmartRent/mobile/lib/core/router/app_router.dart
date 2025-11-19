@@ -101,7 +101,7 @@ final goRouterProvider = Provider<GoRouter>((ref) {
         path: '/asset/:id',
         name: 'asset-details',
         pageBuilder: (context, state) {
-          final assetId = int.parse(state.pathParameters['id']!);
+          final assetId = state.pathParameters['id']!;
           return MaterialPage(
             key: state.pageKey,
             child: AssetDetailsScreen(assetId: assetId),
@@ -122,7 +122,7 @@ final goRouterProvider = Provider<GoRouter>((ref) {
         path: '/rentals/create/:assetId',
         name: 'create-rental',
         pageBuilder: (context, state) {
-          final assetId = int.parse(state.pathParameters['assetId']!);
+          final assetId = state.pathParameters['assetId']!;
           return MaterialPage(
             key: state.pageKey,
             child: CreateRentalScreen(assetId: assetId),

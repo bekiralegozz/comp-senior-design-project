@@ -12,13 +12,22 @@ import '../core/providers/auth_provider.dart';
 /// Provider for featured assets
 final featuredAssetsProvider = FutureProvider<List<Asset>>((ref) async {
   final apiService = ApiService();
+  await apiService.initialize();
   return await apiService.getAssets(limit: 10, availableOnly: true);
 });
 
 /// Provider for asset categories
 final categoriesProvider = FutureProvider<List<String>>((ref) async {
   final apiService = ApiService();
+  await apiService.initialize();
   return await apiService.getAssetCategories();
+});
+
+/// Provider for all assets
+final allAssetsProvider = FutureProvider<List<Asset>>((ref) async {
+  final apiService = ApiService();
+  await apiService.initialize();
+  return await apiService.getAssets(limit: 100, availableOnly: true);
 });
 
 class HomeScreen extends ConsumerStatefulWidget {
@@ -28,13 +37,21 @@ class HomeScreen extends ConsumerStatefulWidget {
   ConsumerState<HomeScreen> createState() => _HomeScreenState();
 }
 
-class _HomeScreenState extends ConsumerState<HomeScreen> {
+class _HomeScreenState extends ConsumerState<HomeScreen> with SingleTickerProviderStateMixin {
   final _searchController = TextEditingController();
   String _selectedCategory = '';
+  late TabController _tabController;
+
+  @override
+  void initState() {
+    super.initState();
+    _tabController = TabController(length: 2, vsync: this);
+  }
 
   @override
   void dispose() {
     _searchController.dispose();
+    _tabController.dispose();
     super.dispose();
   }
 
@@ -60,6 +77,22 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
                 fontWeight: FontWeight.bold,
                 color: AppColors.primary,
               ),
+            ),
+          ],
+        ),
+        bottom: TabBar(
+          controller: _tabController,
+          indicatorColor: AppColors.primary,
+          labelColor: AppColors.primary,
+          unselectedLabelColor: AppColors.grey,
+          tabs: const [
+            Tab(
+              icon: Icon(Icons.home_outlined),
+              text: 'Home',
+            ),
+            Tab(
+              icon: Icon(Icons.list_outlined),
+              text: 'All Assets',
             ),
           ],
         ),
@@ -143,42 +176,50 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
           ),
         ],
       ),
-      body: RefreshIndicator(
-        onRefresh: () async {
-          ref.invalidate(featuredAssetsProvider);
-          ref.invalidate(categoriesProvider);
-        },
-        child: SingleChildScrollView(
-          physics: const AlwaysScrollableScrollPhysics(),
-          padding: const EdgeInsets.all(AppSpacing.md),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              // Welcome Header
-              _buildWelcomeHeader(theme),
-              const SizedBox(height: AppSpacing.lg),
+      body: TabBarView(
+        controller: _tabController,
+        children: [
+          // Home Tab
+          RefreshIndicator(
+            onRefresh: () async {
+              ref.invalidate(featuredAssetsProvider);
+              ref.invalidate(categoriesProvider);
+            },
+            child: SingleChildScrollView(
+              physics: const AlwaysScrollableScrollPhysics(),
+              padding: const EdgeInsets.all(AppSpacing.md),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  // Welcome Header
+                  _buildWelcomeHeader(theme),
+                  const SizedBox(height: AppSpacing.lg),
 
-              // Search Bar
-              _buildSearchBar(theme),
-              const SizedBox(height: AppSpacing.lg),
+                  // Search Bar
+                  _buildSearchBar(theme),
+                  const SizedBox(height: AppSpacing.lg),
 
-              // Quick Stats
-              _buildQuickStats(theme),
-              const SizedBox(height: AppSpacing.lg),
+                  // Quick Stats
+                  _buildQuickStats(theme),
+                  const SizedBox(height: AppSpacing.lg),
 
-              // Categories
-              _buildCategoriesSection(categories, theme),
-              const SizedBox(height: AppSpacing.lg),
+                  // Categories
+                  _buildCategoriesSection(categories, theme),
+                  const SizedBox(height: AppSpacing.lg),
 
-              // Featured Assets
-              _buildFeaturedAssetsSection(featuredAssets, theme),
-              const SizedBox(height: AppSpacing.lg),
+                  // Featured Assets
+                  _buildFeaturedAssetsSection(featuredAssets, theme),
+                  const SizedBox(height: AppSpacing.lg),
 
-              // Quick Actions
-              _buildQuickActions(theme),
-            ],
+                  // Quick Actions
+                  _buildQuickActions(theme),
+                ],
+              ),
+            ),
           ),
-        ),
+          // All Assets Tab
+          _buildAllAssetsTab(theme),
+        ],
       ),
     );
   }
@@ -447,10 +488,8 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
             ),
             TextButton(
               onPressed: () {
-                // TODO: Navigate to all assets
-                ScaffoldMessenger.of(context).showSnackBar(
-                  const SnackBar(content: Text('View all assets coming soon!')),
-                );
+                // Switch to All Assets tab
+                _tabController.animateTo(1);
               },
               child: const Text('See All'),
             ),
@@ -463,7 +502,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
                   child: Text('No assets available at the moment'),
                 )
               : SizedBox(
-                  height: 280,
+                  height: 320,
                   child: ListView.builder(
                     scrollDirection: Axis.horizontal,
                     itemCount: assets.length,
@@ -474,10 +513,12 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
                           right: index < assets.length - 1 ? AppSpacing.sm : 0,
                         ),
                         child: SizedBox(
-                          width: 250,
+                          width: 220,
+                          height: 320,
                           child: AssetCard(
                             asset: asset,
                             onTap: () => context.go('/asset/${asset.id}'),
+                            compact: false,
                           ),
                         ),
                       );
@@ -572,6 +613,106 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
               ),
             ),
           ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildAllAssetsTab(ThemeData theme) {
+    final allAssets = ref.watch(allAssetsProvider);
+
+    return RefreshIndicator(
+      onRefresh: () async {
+        ref.invalidate(allAssetsProvider);
+      },
+      child: allAssets.when(
+        data: (assets) {
+          if (assets.isEmpty) {
+            return Center(
+              child: Column(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  Icon(
+                    Icons.inventory_2_outlined,
+                    size: 64,
+                    color: AppColors.grey,
+                  ),
+                  const SizedBox(height: AppSpacing.md),
+                  Text(
+                    'No assets available',
+                    style: theme.textTheme.titleMedium?.copyWith(
+                      color: AppColors.grey,
+                    ),
+                  ),
+                  const SizedBox(height: AppSpacing.xs),
+                  Text(
+                    'Check back later for new listings',
+                    style: theme.textTheme.bodySmall?.copyWith(
+                      color: AppColors.grey,
+                    ),
+                  ),
+                ],
+              ),
+            );
+          }
+
+          return ListView.builder(
+            padding: const EdgeInsets.all(AppSpacing.md),
+            itemCount: assets.length,
+            itemBuilder: (context, index) {
+              final asset = assets[index];
+              return Padding(
+                padding: EdgeInsets.only(
+                  bottom: index < assets.length - 1 ? AppSpacing.md : 0,
+                ),
+                child: AssetCard(
+                  asset: asset,
+                  onTap: () => context.go('/asset/${asset.id}'),
+                ),
+              );
+            },
+          );
+        },
+        loading: () => const Center(
+          child: CircularProgressIndicator(),
+        ),
+        error: (error, stack) => SingleChildScrollView(
+          child: Padding(
+            padding: const EdgeInsets.all(AppSpacing.lg),
+            child: Column(
+              mainAxisAlignment: MainAxisAlignment.center,
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Icon(
+                  Icons.error_outline,
+                  size: 64,
+                  color: AppColors.error,
+                ),
+                const SizedBox(height: AppSpacing.md),
+                Text(
+                  'Error loading assets',
+                  style: theme.textTheme.titleMedium?.copyWith(
+                    color: AppColors.error,
+                  ),
+                ),
+                const SizedBox(height: AppSpacing.xs),
+                Text(
+                  error.toString(),
+                  style: theme.textTheme.bodySmall?.copyWith(
+                    color: AppColors.grey,
+                  ),
+                  textAlign: TextAlign.center,
+                  maxLines: 5,
+                  overflow: TextOverflow.ellipsis,
+                ),
+                const SizedBox(height: AppSpacing.md),
+                ElevatedButton(
+                  onPressed: () => ref.invalidate(allAssetsProvider),
+                  child: const Text('Retry'),
+                ),
+              ],
+            ),
+          ),
         ),
       ),
     );

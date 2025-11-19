@@ -369,7 +369,7 @@ class ApiService {
     }
   }
 
-  Future<Asset> getAsset(int assetId) async {
+  Future<Asset> getAsset(String assetId) async {
     try {
       final response = await dio.get('/assets/$assetId');
       return Asset.fromJson(response.data);
@@ -378,7 +378,7 @@ class ApiService {
     }
   }
 
-  Future<List<Asset>> getAssetsByOwner(int ownerId) async {
+  Future<List<Asset>> getAssetsByOwner(String ownerId) async {
     try {
       final response = await dio.get('/assets/owner/$ownerId');
       return (response.data as List)
@@ -407,7 +407,7 @@ class ApiService {
     }
   }
 
-  Future<Asset> updateAsset(int assetId, UpdateAssetRequest request) async {
+  Future<Asset> updateAsset(String assetId, UpdateAssetRequest request) async {
     try {
       final response = await dio.put('/assets/$assetId', data: request.toJson());
       return Asset.fromJson(response.data);
@@ -416,7 +416,7 @@ class ApiService {
     }
   }
 
-  Future<Asset> toggleAssetAvailability(int assetId) async {
+  Future<Asset> toggleAssetAvailability(String assetId) async {
     try {
       final response = await dio.post('/assets/$assetId/toggle-availability');
       return Asset.fromJson(response.data);
