@@ -180,33 +180,42 @@ async def _upsert_profile(
     try:
         # First, try INSERT (profile shouldn't exist during signup)
         logger.info(f"Attempting to insert profile for user {user_id}")
-        response = await _call_supabase(
-            table.insert(payload).execute
+        logger.info(f"Profile payload: {payload}")
+        
+        # Execute insert directly using anyio
+        response = await anyio.to_thread.run_sync(
+            lambda: table.insert(payload).execute()
         )
         
         # Verify the response contains data
         if hasattr(response, 'data') and response.data:
             logger.info(f"✅ Successfully inserted profile for user {user_id}")
+            logger.info(f"Profile data: {response.data}")
             return
         else:
             logger.warning(f"Insert returned no data for user {user_id}, but no error raised")
             # If no data but no error, assume success and continue
+            return
             
     except Exception as insert_error:
         # If insert fails (e.g., profile already exists), try upsert
         error_msg = str(insert_error)
-        logger.warning(f"Insert failed for user {user_id}, trying upsert: {error_msg}")
+        logger.error(f"❌ Insert failed for user {user_id}: {error_msg}")
+        logger.warning(f"Trying upsert as fallback...")
         
         try:
             # Use upsert as fallback (in case profile was created elsewhere)
             # on_conflict="id" means update if id already exists
             logger.info(f"Attempting to upsert profile for user {user_id}")
-            response = await _call_supabase(
-                table.upsert(payload, on_conflict="id").execute
+            
+            # Execute upsert directly using anyio
+            response = await anyio.to_thread.run_sync(
+                lambda: table.upsert(payload, on_conflict="id").execute()
             )
             
             if hasattr(response, 'data') and response.data:
                 logger.info(f"✅ Successfully upserted profile for user {user_id}")
+                logger.info(f"Profile data: {response.data}")
                 return
             else:
                 logger.warning(f"Upsert returned no data for user {user_id}")
