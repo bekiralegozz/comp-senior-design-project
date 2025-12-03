@@ -10,7 +10,7 @@ import uvicorn
 
 from app.core.config import settings
 from app.core.middleware import SupabaseAuthMiddleware
-from app.api.routes import assets, auth, rentals, users
+from app.api.routes import assets, auth, rentals, users, iot_devices
 
 
 @asynccontextmanager
@@ -86,6 +86,7 @@ app.include_router(auth.router)
 app.include_router(assets.router, prefix="/api/v1/assets", tags=["Assets"])
 app.include_router(rentals.router, prefix="/api/v1/rentals", tags=["Rentals"])
 app.include_router(users.router, prefix="/api/v1/users", tags=["Users"])
+app.include_router(iot_devices.router, prefix="/api/v1/iot", tags=["IoT Devices"])
 
 
 if __name__ == "__main__":

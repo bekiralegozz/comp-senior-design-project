@@ -25,6 +25,12 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
   }
 
   Future<void> _handleLogin() async {
+    // TEMPORARY BYPASS: Skip login and go directly to home
+    if (!mounted) return;
+    context.go('/');
+    return;
+    
+    /* ORIGINAL CODE (disabled for testing):
     if (!_formKey.currentState!.validate()) return;
 
     final success = await ref.read(authStateProvider.notifier).loginWithCredentials(
@@ -56,6 +62,7 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
       );
       ref.read(authStateProvider.notifier).clearErrorMessage();
     }
+    */
   }
 
   Future<void> _handlePasswordReset() async {
@@ -107,6 +114,15 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
   }
 
   Future<void> _handleWalletConnect() async {
+    // TEMPORARY BYPASS: Skip wallet connection and go directly to home
+    if (!mounted) return;
+    
+    // Navigate directly to home (bypassing authentication for testing)
+    context.go('/');
+    return;
+    
+    // Original code (disabled for testing):
+    /*
     final success = await ref.read(authStateProvider.notifier).connectWallet();
 
     if (!mounted) return;
@@ -133,6 +149,7 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
       );
       ref.read(authStateProvider.notifier).clearErrorMessage();
     }
+    */
   }
 
   @override

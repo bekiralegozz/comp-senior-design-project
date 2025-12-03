@@ -2,11 +2,8 @@
 Supabase client factory utilities.
 """
 
-from functools import lru_cache
 from typing import Literal
-
 from supabase import Client, create_client
-
 from app.core.config import settings
 
 
@@ -14,9 +11,13 @@ class SupabaseConfigurationError(RuntimeError):
     """Raised when Supabase configuration is missing or invalid."""
 
 
-@lru_cache
+# Global clients
+_service_client: Client = None
+_anon_client: Client = None
+
+
 def _build_supabase_client(scope: Literal["service", "anon"] = "service") -> Client:
-    """Create and memoize a Supabase client instance for the requested scope."""
+    """Create a Supabase client instance for the requested scope."""
     url = settings.SUPABASE_URL
     if not url:
         raise SupabaseConfigurationError("SUPABASE_URL is not configured")
@@ -35,7 +36,15 @@ def _build_supabase_client(scope: Literal["service", "anon"] = "service") -> Cli
 
 
 def get_supabase_client(use_service_role: bool = True) -> Client:
-    """Return a cached Supabase client for the requested scope."""
-    scope: Literal["service", "anon"] = "service" if use_service_role else "anon"
-    return _build_supabase_client(scope)
+    """Return a Supabase client for the requested scope."""
+    global _service_client, _anon_client
+    
+    if use_service_role:
+        if _service_client is None:
+            _service_client = _build_supabase_client("service")
+        return _service_client
+    else:
+        if _anon_client is None:
+            _anon_client = _build_supabase_client("anon")
+        return _anon_client
 

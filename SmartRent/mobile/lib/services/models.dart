@@ -89,7 +89,7 @@ class Asset {
   final String title;
   final String? description;
   final String category;
-  final double pricePerDay;
+  final double? pricePerDay;  // Nullable
   final String currency;
   final String? location;
   final String ownerId;  // Changed from int to String for UUID support
@@ -107,7 +107,7 @@ class Asset {
     required this.title,
     this.description,
     required this.category,
-    required this.pricePerDay,
+    this.pricePerDay,  // Optional
     required this.currency,
     this.location,
     required this.ownerId,
@@ -228,7 +228,7 @@ class CreateAssetRequest {
   final String title;
   final String? description;
   final String category;
-  final double pricePerDay;
+  final double? pricePerDay;  // Nullable
   final String currency;
   final String? location;
   final String ownerId;  // Changed from int to String for UUID support
@@ -238,7 +238,7 @@ class CreateAssetRequest {
     required this.title,
     this.description,
     required this.category,
-    required this.pricePerDay,
+    this.pricePerDay,  // Optional
     required this.currency,
     this.location,
     required this.ownerId,
