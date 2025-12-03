@@ -78,12 +78,21 @@ def _map_asset_from_db(asset_data: Dict[str, Any], owner_data: Optional[Dict[str
     # Map owner data if available
     owner_dict = None
     if owner_data:
+        # Handle created_at - it might be string or datetime
+        created_at = owner_data.get("created_at")
+        if created_at and hasattr(created_at, 'isoformat'):
+            created_at_str = created_at.isoformat()
+        elif created_at:
+            created_at_str = str(created_at)
+        else:
+            created_at_str = None
+            
         owner_dict = {
             "id": str(owner_data.get("id", "")),
             "email": owner_data.get("email"),
             "displayName": owner_data.get("full_name"),
             "walletAddress": owner_data.get("wallet_address"),
-            "createdAt": owner_data.get("created_at").isoformat() if owner_data.get("created_at") else None,
+            "createdAt": created_at_str,
         }
     
     return AssetResponse(

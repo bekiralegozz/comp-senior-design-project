@@ -24,7 +24,7 @@ class CurrentUserNotifier extends StateNotifier<AsyncValue<User?>> {
       
       // Simulated user data
       final user = User(
-        id: 1,
+        id: '00000000-0000-0000-0000-000000000001',  // UUID for demo user
         email: 'demo@smartrent.com',
         displayName: 'Demo User',
         walletAddress: '0x742d35Cc6565C42cF791F93d2b6e7b0b29c2b0c3',

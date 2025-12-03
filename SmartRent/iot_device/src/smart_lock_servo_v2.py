@@ -20,7 +20,8 @@ CONFIG = {
     'WIFI_PASSWORD': 'YOUR_WIFI_PASSWORD',      # ← WiFi şifrenizi yazın
     
     # Backend API (bilgisayarınızın IP adresi)
-    'API_BASE_URL': 'http://172.21.133.50:8000/api/v1/iot',  # ✓ Hazır
+    #'API_BASE_URL': 'http://172.21.133.50:8000/api/v1/iot',
+    'API_BASE_URL': 'http://172.17.214.203:8000/api/v1/iot',  # ✓ GÜNCEL IP
     'API_KEY': 'sk_iot_12371f4cdb748e2afca99b173db4a53097c1ae029b97249c',  # ✓ API key
     
     # Device Info

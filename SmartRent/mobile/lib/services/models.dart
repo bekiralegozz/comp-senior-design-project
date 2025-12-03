@@ -57,7 +57,7 @@ class PaginatedResponse<T> {
 /// User model
 @JsonSerializable()
 class User {
-  final int id;
+  final String id;  // Changed from int to String for UUID support
   final String? email;
   final String? displayName;
   final String? walletAddress;
@@ -66,7 +66,7 @@ class User {
   
   // Computed properties for compatibility
   String get fullName => displayName ?? 'Unknown User';
-  String get username => email?.split('@').first ?? 'user${id}';
+  String get username => email?.split('@').first ?? 'user_${id.substring(0, 8)}';
   bool get isVerified => walletAddress != null;
 
   User({
@@ -128,9 +128,9 @@ class Asset {
 /// Rental model
 @JsonSerializable()
 class Rental {
-  final int id;
-  final int assetId;
-  final int renterId;
+  final String id;  // Changed from int to String for UUID support
+  final String assetId;  // Changed from int to String for UUID support
+  final String renterId;  // Changed from int to String for UUID support
   final DateTime startDate;
   final DateTime endDate;
   final double totalPrice;
@@ -171,7 +171,7 @@ class Rental {
 /// IoT Device model
 @JsonSerializable()
 class IoTDevice {
-  final int id;
+  final int id;  // bigint in database
   final String deviceId;
   final String deviceType;
   final String name;
@@ -180,7 +180,7 @@ class IoTDevice {
   final DateTime? lastSeen;
   final String? firmwareVersion;
   final String? hardwareVersion;
-  final int? assetId;
+  final String? assetId;  // Changed from int to String for UUID support
   final DateTime createdAt;
   final DateTime? updatedAt;
 
@@ -253,8 +253,8 @@ class CreateAssetRequest {
 /// Create rental request model
 @JsonSerializable()
 class CreateRentalRequest {
-  final int assetId;
-  final int renterId;
+  final String assetId;  // Changed from int to String for UUID support
+  final String renterId;  // Changed from int to String for UUID support
   final DateTime startDate;
   final DateTime endDate;
   final double totalPrice;
