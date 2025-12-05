@@ -16,12 +16,11 @@ from machine import Pin, PWM
 
 CONFIG = {
     # WiFi Settings - BURAYA KENDİ WiFi BİLGİLERİNİZİ YAZIN!
-    'WIFI_SSID': 'YOUR_WIFI_NAME',              # ← WiFi adınızı yazın
-    'WIFI_PASSWORD': 'YOUR_WIFI_PASSWORD',      # ← WiFi şifrenizi yazın
+    'WIFI_SSID': 'Berk',              # ← WiFi adınızı yazın
+    'WIFI_PASSWORD': 'Berk1234',      # ← WiFi şifrenizi yazın
     
     # Backend API (bilgisayarınızın IP adresi)
-    #'API_BASE_URL': 'http://172.21.133.50:8000/api/v1/iot',
-    'API_BASE_URL': 'http://172.17.214.203:8000/api/v1/iot',  # ✓ GÜNCEL IP
+    'API_BASE_URL': 'http://172.20.10.3:8000/api/v1/iot',  # ✓ GÜNCEL IP (2025-12-04)
     'API_KEY': 'sk_iot_12371f4cdb748e2afca99b173db4a53097c1ae029b97249c',  # ✓ API key
     
     # Device Info

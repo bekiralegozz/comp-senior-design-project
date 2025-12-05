@@ -99,16 +99,16 @@ def _map_asset_from_db(asset_data: Dict[str, Any], owner_data: Optional[Dict[str
         id=str(asset_data["id"]),
         title=asset_data.get("name", "Unnamed Asset"),
         description=asset_data.get("description"),
-        category="other",  # Default since not in schema
-        pricePerDay=0.0,  # Default since not in schema
-        currency="Tokens",  # Default currency (blockchain token)
+        category=asset_data.get("category", "other"),
+        pricePerDay=float(asset_data.get("price_per_day", 0.0)),
+        currency=asset_data.get("currency", "token"),
         location=location_str,
         ownerId=str(asset_data.get("owner_id", "")),
-        tokenId=None,  # Not in schema
+        tokenId=asset_data.get("token_id"),
         contractAddress=asset_data.get("asset_share_address"),
-        isAvailable=asset_data.get("active", True),
-        iotDeviceId=None,  # Would need to join with devices table
-        imageUrl=asset_data.get("main_image_url"),  # Main image URL from database
+        isAvailable=asset_data.get("is_available", True),
+        iotDeviceId=asset_data.get("iot_device_id"),
+        imageUrl=asset_data.get("image_url") or asset_data.get("main_image_url"),
         createdAt=asset_data.get("created_at") or datetime.now(),
         updatedAt=asset_data.get("updated_at"),
         owner=owner_dict,
@@ -255,14 +255,78 @@ async def get_asset_categories():
     ]
 
 
+class CreateAssetRequest(BaseModel):
+    """Request model for creating a new asset"""
+    name: str
+    description: Optional[str] = None
+    category: str = "other"
+    price_per_day: float
+    currency: str = "token"
+    location: Optional[str] = None
+    image_url: Optional[str] = None
+    iot_device_id: Optional[str] = None
+    owner_id: str  # UUID of the owner (from auth)
+
+
 @router.post("/", status_code=status.HTTP_201_CREATED)
-async def create_asset():
+async def create_asset(asset_request: CreateAssetRequest):
     """Create a new asset"""
-    # TODO: Implement asset creation
-    raise HTTPException(
-        status_code=status.HTTP_501_NOT_IMPLEMENTED,
-        detail="Asset creation endpoint - TODO"
-    )
+    supabase = get_supabase_client()
+    
+    # Prepare location as JSONB if provided
+    location_json = None
+    if asset_request.location:
+        location_json = {"address": asset_request.location}
+    
+    # Prepare asset data for insertion
+    asset_data = {
+        "owner_id": asset_request.owner_id,
+        "name": asset_request.name,
+        "description": asset_request.description,
+        "category": asset_request.category,
+        "price_per_day": asset_request.price_per_day,
+        "currency": asset_request.currency,
+        "location": location_json,
+        "image_url": asset_request.image_url,
+        "iot_device_id": asset_request.iot_device_id,
+        "is_available": True,
+        "active": True,
+    }
+    
+    # Insert asset into database
+    try:
+        response = await _call_supabase(
+            supabase.table("assets").insert(asset_data).execute
+        )
+        
+        if not response.data or len(response.data) == 0:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Failed to create asset"
+            )
+        
+        created_asset = response.data[0]
+        
+        # Fetch owner data
+        owner_response = await _call_supabase(
+            supabase.table("profiles")
+            .select("*")
+            .eq("id", asset_request.owner_id)
+            .execute
+        )
+        
+        owner_data = owner_response.data[0] if owner_response.data else None
+        
+        # Return formatted asset
+        return _map_asset_from_db(created_asset, owner_data)
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to create asset: {str(e)}"
+        )
 
 
 @router.put("/{asset_id}")

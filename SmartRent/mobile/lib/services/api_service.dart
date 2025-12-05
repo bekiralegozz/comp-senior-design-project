@@ -398,9 +398,29 @@ class ApiService {
     }
   }
 
-  Future<Asset> createAsset(CreateAssetRequest request) async {
+  Future<Asset> createAsset({
+    required String name,
+    required String ownerId,
+    required double pricePerDay,
+    String? description,
+    String category = 'other',
+    String currency = 'token',
+    String? location,
+    String? imageUrl,
+    String? iotDeviceId,
+  }) async {
     try {
-      final response = await dio.post('/assets/', data: request.toJson());
+      final response = await dio.post('/assets/', data: {
+        'name': name,
+        'owner_id': ownerId,
+        'price_per_day': pricePerDay,
+        'description': description,
+        'category': category,
+        'currency': currency,
+        'location': location,
+        'image_url': imageUrl,
+        'iot_device_id': iotDeviceId,
+      });
       return Asset.fromJson(response.data);
     } catch (e) {
       throw _handleError(e);
@@ -450,7 +470,7 @@ class ApiService {
     }
   }
 
-  Future<Rental> getRental(int rentalId) async {
+  Future<Rental> getRental(String rentalId) async {
     try {
       final response = await dio.get('/rentals/$rentalId');
       return Rental.fromJson(response.data);
@@ -459,7 +479,7 @@ class ApiService {
     }
   }
 
-  Future<List<Rental>> getRentalsByUser(int userId) async {
+  Future<List<Rental>> getRentalsByUser(String userId) async {
     try {
       final response = await dio.get('/rentals/user/$userId');
       return (response.data as List)
@@ -470,16 +490,7 @@ class ApiService {
     }
   }
 
-  Future<Rental> createRental(CreateRentalRequest request) async {
-    try {
-      final response = await dio.post('/rentals/', data: request.toJson());
-      return Rental.fromJson(response.data);
-    } catch (e) {
-      throw _handleError(e);
-    }
-  }
-
-  Future<Rental> activateRental(int rentalId) async {
+  Future<Rental> activateRental(String rentalId) async {
     try {
       final response = await dio.post('/rentals/$rentalId/activate');
       return Rental.fromJson(response.data);
@@ -665,6 +676,63 @@ class ApiException implements Exception {
 
   @override
   String toString() => 'ApiException: $message';
+}
+
+// ============================================
+// IoT Devices Methods
+// ============================================
+
+extension IoTDevicesMethods on ApiService {
+  Future<List<IoTDevice>> getIoTDevices() async {
+    try {
+      final response = await dio.get('/iot/devices');
+      return (response.data as List)
+          .map((json) => IoTDevice.fromJson(json))
+          .toList();
+    } catch (e) {
+      throw _handleError(e);
+    }
+  }
+}
+
+// ============================================
+// Rentals Methods
+// ============================================
+
+extension RentalsMethods on ApiService {
+  Future<Map<String, dynamic>> createRental({
+    required String assetId,
+    required String renterId,
+    required DateTime startDate,
+    required DateTime endDate,
+    double? totalPriceUsd,
+    String? paymentTxHash,
+  }) async {
+    try {
+      final response = await dio.post('/rentals/', data: {
+        'asset_id': assetId,
+        'renter_id': renterId,
+        'start_date': startDate.toIso8601String().split('T')[0],  // YYYY-MM-DD
+        'end_date': endDate.toIso8601String().split('T')[0],
+        'total_price_usd': totalPriceUsd,
+        'payment_tx_hash': paymentTxHash,
+      });
+      return response.data as Map<String, dynamic>;
+    } catch (e) {
+      throw _handleError(e);
+    }
+  }
+
+  Future<List<Rental>> getMyRentals(String userId) async {
+    try {
+      final response = await dio.get('/rentals/user/$userId');
+      return (response.data as List)
+          .map((json) => Rental.fromJson(json))
+          .toList();
+    } catch (e) {
+      throw _handleError(e);
+    }
+  }
 }
 
 

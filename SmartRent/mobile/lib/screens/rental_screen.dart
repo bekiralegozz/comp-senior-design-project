@@ -7,25 +7,32 @@ import '../constants/config.dart';
 import '../services/models.dart';
 import '../services/api_service.dart';
 import '../components/rental_card.dart';
+import '../core/providers/auth_provider.dart';
 
 /// Provider for user rentals
-final userRentalsProvider = FutureProvider.family<List<Rental>, int?>((ref, userId) async {
+final userRentalsProvider = FutureProvider.autoDispose<List<Rental>>((ref) async {
   final apiService = ApiService();
-  if (userId != null) {
-    return await apiService.getRentalsByUser(userId);
-  } else {
-    return await apiService.getRentals(limit: 50);
+  await apiService.initialize();
+  
+  final authState = ref.watch(authStateProvider);
+  final profile = authState.profile;
+  
+  if (profile == null || profile.id.isEmpty) {
+    return [];
   }
+  
+  return await apiService.getMyRentals(profile.id);
 });
 
 /// Provider for rental details
-final rentalDetailsProvider = FutureProvider.family<Rental, int>((ref, rentalId) async {
+final rentalDetailsProvider = FutureProvider.family<Rental, String>((ref, rentalId) async {
   final apiService = ApiService();
+  await apiService.initialize();
   return await apiService.getRental(rentalId);
 });
 
 class RentalScreen extends ConsumerStatefulWidget {
-  final int? rentalId;
+  final String? rentalId;
 
   const RentalScreen({Key? key, this.rentalId}) : super(key: key);
 
@@ -139,14 +146,11 @@ class _RentalScreenState extends ConsumerState<RentalScreen>
   }
 
   Widget _buildRentalsList(String statusFilter) {
-    // TODO: In a real app, you'd get the current user ID from authentication
-    const currentUserId = 1; // Placeholder
-    
-    final rentals = ref.watch(userRentalsProvider(currentUserId));
+    final rentals = ref.watch(userRentalsProvider);
 
     return RefreshIndicator(
       onRefresh: () async {
-        ref.invalidate(userRentalsProvider(currentUserId));
+        ref.invalidate(userRentalsProvider);
       },
       child: rentals.when(
         data: (data) {
@@ -213,7 +217,7 @@ class _RentalScreenState extends ConsumerState<RentalScreen>
             children: [
               Text('Error loading rentals: $error'),
               ElevatedButton(
-                onPressed: () => ref.invalidate(userRentalsProvider(currentUserId)),
+                onPressed: () => ref.invalidate(userRentalsProvider),
                 child: const Text('Retry'),
               ),
             ],
@@ -332,13 +336,13 @@ class _RentalScreenState extends ConsumerState<RentalScreen>
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       Text(
-                        asset.title,
+                        asset.title ?? 'Unnamed Asset',
                         style: theme.textTheme.titleMedium?.copyWith(
                           fontWeight: FontWeight.w600,
                         ),
                       ),
                       Text(
-                        AssetCategories.getDisplayName(asset.category),
+                        AssetCategories.getDisplayName(asset.category ?? 'other'),
                         style: theme.textTheme.bodySmall?.copyWith(
                           color: AppColors.grey,
                         ),

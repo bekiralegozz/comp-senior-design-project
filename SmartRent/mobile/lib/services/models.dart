@@ -85,65 +85,105 @@ class User {
 /// Asset model
 @JsonSerializable()
 class Asset {
-  final String id;  // Changed from int to String for UUID support
-  final String title;
+  final String id;
+  
+  final String? title;  // Backend returns 'title' directly
+  
   final String? description;
-  final String category;
-  final double? pricePerDay;  // Nullable
-  final String currency;
-  final String? location;
-  final String ownerId;  // Changed from int to String for UUID support
-  final int? tokenId;
-  final String? contractAddress;
-  final bool isAvailable;
-  final String? iotDeviceId;
-  final String? imageUrl;  // Main image URL
-  final DateTime createdAt;
-  final DateTime? updatedAt;
+  
+  final String? category;  // Backend returns 'category' directly
+  
+  final double? pricePerDay;  // Backend returns 'pricePerDay' in camelCase
+  
+  final String? currency;  // Backend returns 'currency' directly
+  
+  final dynamic location;  // Backend returns 'location' directly
+  
+  final String? ownerId;  // Backend returns 'ownerId' in camelCase
+  
+  final int? tokenId;  // Backend returns 'tokenId' in camelCase
+  
+  final String? contractAddress;  // Backend returns 'contractAddress' in camelCase
+  
+  final bool? isAvailable;  // Backend returns 'isAvailable' in camelCase
+  
+  final String? iotDeviceId;  // Backend returns 'iotDeviceId' in camelCase
+  
+  final String? imageUrl;  // Backend returns 'imageUrl' in camelCase
+  
+  final DateTime? createdAt;  // Backend returns 'createdAt' in camelCase
+  
+  final DateTime? updatedAt;  // Backend returns 'updatedAt' in camelCase
+  
   final User? owner;
 
   Asset({
     required this.id,
-    required this.title,
+    this.title,
     this.description,
-    required this.category,
-    this.pricePerDay,  // Optional
-    required this.currency,
+    this.category,
+    this.pricePerDay,
+    this.currency,
     this.location,
-    required this.ownerId,
+    this.ownerId,
     this.tokenId,
     this.contractAddress,
-    required this.isAvailable,
+    this.isAvailable,
     this.iotDeviceId,
     this.imageUrl,
-    required this.createdAt,
+    this.createdAt,
     this.updatedAt,
     this.owner,
   });
 
   factory Asset.fromJson(Map<String, dynamic> json) => _$AssetFromJson(json);
   Map<String, dynamic> toJson() => _$AssetToJson(this);
+  
+  // Helper method to get location as String
+  String? get locationString {
+    if (location == null) return null;
+    if (location is String) return location as String;
+    if (location is Map) {
+      final map = location as Map<String, dynamic>;
+      return map['address'] as String?;
+    }
+    return null;
+  }
 }
 
 /// Rental model
 @JsonSerializable()
 class Rental {
-  final String id;  // Changed from int to String for UUID support
-  final String assetId;  // Changed from int to String for UUID support
-  final String renterId;  // Changed from int to String for UUID support
+  final String id;
+  
+  @JsonKey(name: 'asset_id')
+  final String assetId;
+  
+  @JsonKey(name: 'renter_id')
+  final String renterId;
+  
+  @JsonKey(name: 'start_date')
   final DateTime startDate;
+  
+  @JsonKey(name: 'end_date')
   final DateTime endDate;
-  final double totalPrice;
-  final String currency;
+  
+  @JsonKey(name: 'total_price_usd')
+  final double? totalPrice;
+  
   final String status;
-  final String? smartContractAddress;
+  
+  @JsonKey(name: 'payment_tx_hash')
   final String? transactionHash;
-  final double securityDeposit;
-  final bool depositReturned;
+  
+  @JsonKey(name: 'created_at')
   final DateTime createdAt;
+  
+  @JsonKey(name: 'updated_at')
   final DateTime? updatedAt;
+  
+  @JsonKey(name: 'assets')
   final Asset? asset;
-  final User? renter;
 
   Rental({
     required this.id,
@@ -151,37 +191,60 @@ class Rental {
     required this.renterId,
     required this.startDate,
     required this.endDate,
-    required this.totalPrice,
-    required this.currency,
+    this.totalPrice,
     required this.status,
-    this.smartContractAddress,
     this.transactionHash,
-    required this.securityDeposit,
-    required this.depositReturned,
     required this.createdAt,
     this.updatedAt,
     this.asset,
-    this.renter,
   });
 
   factory Rental.fromJson(Map<String, dynamic> json) => _$RentalFromJson(json);
   Map<String, dynamic> toJson() => _$RentalToJson(this);
+  
+  // Helper getters for compatibility
+  String get currency => 'USD';
+  double get securityDeposit => 0.0;
+  bool get depositReturned => false;
+  User? get renter => null;
 }
 
 /// IoT Device model
 @JsonSerializable()
 class IoTDevice {
   final int id;  // bigint in database
+  
+  @JsonKey(name: 'device_id')
   final String deviceId;
+  
+  @JsonKey(name: 'device_type')
   final String deviceType;
+  
+  @JsonKey(name: 'device_name')
   final String name;
+  
+  @JsonKey(name: 'is_online')
   final bool isOnline;
+  
+  @JsonKey(name: 'battery_level')
   final int? batteryLevel;
+  
+  @JsonKey(name: 'last_seen')
   final DateTime? lastSeen;
+  
+  @JsonKey(name: 'firmware_version')
   final String? firmwareVersion;
+  
+  @JsonKey(name: 'hardware_version')
   final String? hardwareVersion;
+  
+  @JsonKey(name: 'asset_id')
   final String? assetId;  // Changed from int to String for UUID support
+  
+  @JsonKey(name: 'created_at')
   final DateTime createdAt;
+  
+  @JsonKey(name: 'updated_at')
   final DateTime? updatedAt;
 
   IoTDevice({

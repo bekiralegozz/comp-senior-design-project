@@ -562,10 +562,8 @@ class _HomeScreenState extends ConsumerState<HomeScreen> with SingleTickerProvid
                 Icons.add_circle_outline,
                 AppColors.primary,
                 () {
-                  // TODO: Navigate to list asset screen
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    const SnackBar(content: Text('List asset coming soon!')),
-                  );
+                  // Navigate to create asset screen
+                  context.push('/assets/create');
                 },
               ),
             ),

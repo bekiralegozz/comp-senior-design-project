@@ -142,7 +142,7 @@ class RentalCard extends StatelessWidget {
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Text(
-                  asset.title,
+                  asset.title ?? 'Unnamed Asset',
                   style: theme.textTheme.titleSmall?.copyWith(
                     fontWeight: FontWeight.w600,
                   ),
@@ -150,7 +150,7 @@ class RentalCard extends StatelessWidget {
                   overflow: TextOverflow.ellipsis,
                 ),
                 Text(
-                  AssetCategories.getDisplayName(asset.category),
+                  AssetCategories.getDisplayName(asset.category ?? 'other'),
                   style: theme.textTheme.bodySmall?.copyWith(
                     color: AppColors.grey,
                   ),

@@ -49,6 +49,10 @@ class AssetDetailsScreen extends ConsumerWidget {
           ),
         ),
       ),
+      bottomNavigationBar: assetDetails.maybeWhen(
+        data: (asset) => _BottomRentBar(asset: asset),
+        orElse: () => null,
+      ),
     );
   }
 
@@ -197,7 +201,7 @@ class AssetDetailsScreen extends ConsumerWidget {
           children: [
             Expanded(
               child: Text(
-                asset.title,
+                asset.title ?? 'Unnamed Asset',
                 style: theme.textTheme.headlineSmall?.copyWith(
                   fontWeight: FontWeight.bold,
                 ),
@@ -209,17 +213,17 @@ class AssetDetailsScreen extends ConsumerWidget {
                 vertical: AppSpacing.xs,
               ),
               decoration: BoxDecoration(
-                color: (AppColors.categoryColors[asset.category] ?? AppColors.primary)
+                color: (AppColors.categoryColors[asset.category ?? 'other'] ?? AppColors.primary)
                     .withOpacity(0.1),
                 borderRadius: BorderRadius.circular(AppRadius.sm),
                 border: Border.all(
-                  color: AppColors.categoryColors[asset.category] ?? AppColors.primary,
+                  color: AppColors.categoryColors[asset.category ?? 'other'] ?? AppColors.primary,
                 ),
               ),
               child: Text(
-                AssetCategories.getDisplayName(asset.category),
+                AssetCategories.getDisplayName(asset.category ?? 'other'),
                 style: theme.textTheme.bodySmall?.copyWith(
-                  color: AppColors.categoryColors[asset.category] ?? AppColors.primary,
+                  color: AppColors.categoryColors[asset.category ?? 'other'] ?? AppColors.primary,
                   fontWeight: FontWeight.w600,
                 ),
               ),
@@ -341,8 +345,8 @@ class AssetDetailsScreen extends ConsumerWidget {
         ),
         const SizedBox(height: AppSpacing.md),
         _buildDetailRow(theme, 'Asset ID', '#${asset.id}'),
-        _buildDetailRow(theme, 'Category', AssetCategories.getDisplayName(asset.category)),
-        _buildDetailRow(theme, 'Currency', asset.currency == "USD" ? "token" : asset.currency),
+        _buildDetailRow(theme, 'Category', AssetCategories.getDisplayName(asset.category ?? 'other')),
+        _buildDetailRow(theme, 'Currency', (asset.currency ?? 'token') == "USD" ? "token" : (asset.currency ?? 'token')),
         if (asset.tokenId != null)
           _buildDetailRow(theme, 'NFT Token ID', '#${asset.tokenId}'),
         if (asset.iotDeviceId != null)
@@ -350,7 +354,7 @@ class AssetDetailsScreen extends ConsumerWidget {
         _buildDetailRow(
           theme, 
           'Listed on', 
-          DateFormat('MMM dd, yyyy').format(asset.createdAt),
+          DateFormat('MMM dd, yyyy').format(asset.createdAt ?? DateTime.now()),
         ),
       ],
     );
@@ -439,19 +443,19 @@ class AssetDetailsScreen extends ConsumerWidget {
     return Container(
       padding: const EdgeInsets.all(AppSpacing.md),
       decoration: BoxDecoration(
-        color: asset.isAvailable 
+        color: (asset.isAvailable ?? false)
             ? AppColors.success.withOpacity(0.1)
             : AppColors.warning.withOpacity(0.1),
         borderRadius: BorderRadius.circular(AppRadius.md),
         border: Border.all(
-          color: asset.isAvailable ? AppColors.success : AppColors.warning,
+          color: (asset.isAvailable ?? false) ? AppColors.success : AppColors.warning,
         ),
       ),
       child: Row(
         children: [
           Icon(
-            asset.isAvailable ? Icons.check_circle : Icons.schedule,
-            color: asset.isAvailable ? AppColors.success : AppColors.warning,
+            (asset.isAvailable ?? false) ? Icons.check_circle : Icons.schedule,
+            color: (asset.isAvailable ?? false) ? AppColors.success : AppColors.warning,
           ),
           const SizedBox(width: AppSpacing.sm),
           Expanded(
@@ -459,14 +463,14 @@ class AssetDetailsScreen extends ConsumerWidget {
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Text(
-                  asset.isAvailable ? 'Available for Rent' : 'Currently Unavailable',
+                  (asset.isAvailable ?? false) ? 'Available for Rent' : 'Currently Unavailable',
                   style: theme.textTheme.titleMedium?.copyWith(
                     fontWeight: FontWeight.w600,
-                    color: asset.isAvailable ? AppColors.success : AppColors.warning,
+                    color: (asset.isAvailable ?? false) ? AppColors.success : AppColors.warning,
                   ),
                 ),
                 Text(
-                  asset.isAvailable 
+                  (asset.isAvailable ?? false)
                       ? 'This asset is ready to be rented'
                       : 'This asset is currently being rented or unavailable',
                   style: theme.textTheme.bodySmall?.copyWith(
@@ -530,21 +534,21 @@ class _BottomRentBar extends StatelessWidget {
             ),
             const SizedBox(width: AppSpacing.md),
             ElevatedButton(
-              onPressed: asset.isAvailable
+              onPressed: (asset.isAvailable ?? false)
                   ? () {
-                      // TODO: Navigate to rental creation
-                      ScaffoldMessenger.of(context).showSnackBar(
-                        const SnackBar(content: Text('Rental booking coming soon!')),
-                      );
+                      // Navigate to rental creation screen with asset data
+                      context.push('/rentals/create/${asset.id}', extra: asset);
                     }
                   : null,
               style: ElevatedButton.styleFrom(
+                backgroundColor: Colors.red,
+                foregroundColor: Colors.white,
                 padding: const EdgeInsets.symmetric(
                   horizontal: AppSpacing.lg,
                   vertical: AppSpacing.md,
                 ),
               ),
-              child: const Text('Rent Now'),
+              child: const Text('Rent'),
             ),
           ],
         ),
