@@ -1,71 +1,25 @@
 {
-  "name": "smartrent-blockchain",
+  "name": "smartrent-blockchain-server",
   "version": "1.0.0",
-  "description": "Smart contracts for SmartRent blockchain-enabled rental platform",
-  "main": "index.js",
+  "description": "Blockchain Server for SmartRent - Processes chain_actions and listens to contract events",
+  "main": "src/index.js",
+  "type": "module",
   "scripts": {
-    "compile": "npx hardhat compile",
-    "test": "npx hardhat test",
-    "deploy": "npx hardhat run scripts/deploy.js",
-    "deploy:testnet": "npx hardhat run scripts/deploy.js --network goerli",
-    "deploy:mainnet": "npx hardhat run scripts/deploy.js --network mainnet",
-    "verify": "npx hardhat verify",
-    "node": "npx hardhat node",
-    "clean": "npx hardhat clean",
-    "coverage": "npx hardhat coverage",
-    "size": "npx hardhat size-contracts",
-    "lint": "solhint 'contracts/**/*.sol'",
-    "lint:fix": "solhint 'contracts/**/*.sol' --fix",
-    "prettier": "prettier --write 'contracts/**/*.sol'",
-    "gas-report": "REPORT_GAS=true npx hardhat test"
+    "start": "node src/index.js",
+    "dev": "node --watch src/index.js"
   },
   "keywords": [
     "blockchain",
     "ethereum",
-    "solidity",
-    "smart-contracts",
-    "rental",
-    "nft",
-    "defi"
+    "sepolia",
+    "smart-contracts"
   ],
-  "author": "SmartRent Team",
+  "author": "",
   "license": "MIT",
-  "devDependencies": {
-    "@nomicfoundation/hardhat-toolbox": "^3.0.2",
-    "@nomiclabs/hardhat-ethers": "^2.2.3",
-    "@nomiclabs/hardhat-etherscan": "^3.1.7",
-    "@openzeppelin/hardhat-upgrades": "^1.28.0",
-    "hardhat": "^2.17.2",
-    "hardhat-contract-sizer": "^2.10.0",
-    "hardhat-gas-reporter": "^1.0.9",
-    "solidity-coverage": "^0.8.4",
-    "solhint": "^3.6.2",
-    "prettier": "^3.0.3",
-    "prettier-plugin-solidity": "^1.1.3"
-  },
   "dependencies": {
-    "@openzeppelin/contracts": "^4.9.3",
-    "@openzeppelin/contracts-upgradeable": "^4.9.3",
-    "dotenv": "^16.3.1",
-    "ethers": "^5.7.2"
-  },
-  "engines": {
-    "node": ">=16.0.0"
-  },
-  "repository": {
-    "type": "git",
-    "url": "https://github.com/smartrent/blockchain"
-  },
-  "bugs": {
-    "url": "https://github.com/smartrent/blockchain/issues"
-  },
-  "homepage": "https://github.com/smartrent/blockchain#readme"
+    "ethers": "^6.13.0",
+    "@supabase/supabase-js": "^2.39.0",
+    "dotenv": "^16.4.1"
+  }
 }
-
-
-
-
-
-
-
 

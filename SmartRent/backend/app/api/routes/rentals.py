@@ -40,9 +40,28 @@ class CreateRentalRequest(BaseModel):
     payment_tx_hash: Optional[str] = None
 
 
-@router.post("/", status_code=201)
+@router.post("/", status_code=status.HTTP_410_GONE, deprecated=True)
 async def create_rental(rental_request: CreateRentalRequest):
-    """Create a new rental agreement"""
+    """
+    [DEPRECATED] Create a new rental agreement
+    
+    ⚠️ This endpoint is deprecated and will be removed.
+    In decentralized architecture, rent payments happen directly on blockchain
+    via mobile app wallet interaction.
+    
+    Use: Mobile App → WalletConnect → RentalManager.payRent()
+    """
+    raise HTTPException(
+        status_code=status.HTTP_410_GONE,
+        detail={
+            "error": "Endpoint deprecated",
+            "message": "Rent payment now happens on blockchain via mobile app",
+            "migration": "Use mobile app wallet to call RentalManager.payRent()",
+            "contract": "0x57044386A0C5Fb623315Dd5b8eeEA6078Bb9193C"
+        }
+    )
+    
+    # Old implementation kept for reference
     supabase = get_supabase_client(use_service_role=True)
     
     # Validate dates
@@ -202,22 +221,55 @@ async def get_rentals_by_user(user_id: str):
         )
 
 
-@router.post("/{rental_id}/activate")
+@router.post("/{rental_id}/activate", deprecated=True, status_code=status.HTTP_410_GONE)
 async def activate_rental(rental_id: int):
-    """Activate/start a rental"""
-    # TODO: Implement activate rental
-    return {"message": f"Activate rental {rental_id} endpoint - TODO"}
+    """
+    [DEPRECATED] Activate/start a rental
+    
+    ⚠️ This endpoint is deprecated.
+    Rental activation happens automatically on blockchain when rent is paid.
+    """
+    raise HTTPException(
+        status_code=status.HTTP_410_GONE,
+        detail={
+            "error": "Endpoint deprecated",
+            "message": "Rental activation is automatic on blockchain",
+            "migration": "Pay rent via RentalManager.payRent() to activate rental"
+        }
+    )
 
 
-@router.post("/{rental_id}/complete")
+@router.post("/{rental_id}/complete", deprecated=True, status_code=status.HTTP_410_GONE)
 async def complete_rental(rental_id: int):
-    """Complete a rental"""
-    # TODO: Implement complete rental
-    return {"message": f"Complete rental {rental_id} endpoint - TODO"}
+    """
+    [DEPRECATED] Complete a rental
+    
+    ⚠️ This endpoint is deprecated.
+    Rental completion is tracked on blockchain via events.
+    """
+    raise HTTPException(
+        status_code=status.HTTP_410_GONE,
+        detail={
+            "error": "Endpoint deprecated",
+            "message": "Rental completion tracked on blockchain",
+            "migration": "Read rental status from blockchain events"
+        }
+    )
 
 
-@router.post("/{rental_id}/cancel")
+@router.post("/{rental_id}/cancel", deprecated=True, status_code=status.HTTP_410_GONE)
 async def cancel_rental(rental_id: int):
-    """Cancel a rental"""
-    # TODO: Implement cancel rental
-    return {"message": f"Cancel rental {rental_id} endpoint - TODO"}
+    """
+    [DEPRECATED] Cancel a rental
+    
+    ⚠️ This endpoint is deprecated.
+    Rental cancellation should be handled on blockchain.
+    """
+    raise HTTPException(
+        status_code=status.HTTP_410_GONE,
+        detail={
+            "error": "Endpoint deprecated",
+            "message": "Rental cancellation handled on blockchain",
+            "migration": "Implement cancellation logic in smart contract if needed"
+        }
+    )

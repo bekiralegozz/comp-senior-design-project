@@ -38,9 +38,9 @@ dependencies:
   hive: ^2.2.3
   hive_flutter: ^1.1.0
   
-  # Web3 and Blockchain (commented out for now, using mock service)
-  # web3dart: ^3.1.5
-  # walletconnect_flutter_v2: ^2.1.12
+  # Web3 and Blockchain
+  web3dart: ^2.7.3
+  walletconnect_flutter_v2: ^2.1.12
   
   # UI Components and Utils
   cached_network_image: ^3.3.0
@@ -76,7 +76,7 @@ dependencies:
   
   # Utils
   url_launcher: ^6.2.1
-  package_info_plus: ^4.2.0
+  package_info_plus: ^7.0.0
   device_info_plus: ^9.1.1
   connectivity_plus: ^5.0.1
   
@@ -110,11 +110,9 @@ dev_dependencies:
 flutter:
   uses-material-design: true
 
-  # Assets (commented - will be created later)
-  # assets:
-  #   - assets/images/
-  #   - assets/icons/
-  #   - assets/animations/
+  # Assets
+  assets:
+    - lib/contracts/
 
   # Fonts (commented - will be created later)
   # fonts:

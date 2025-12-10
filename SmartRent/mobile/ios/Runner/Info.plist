@@ -45,5 +45,38 @@
 	<true/>
 	<key>UIApplicationSupportsIndirectInputEvents</key>
 	<true/>
+	
+	<!-- WalletConnect: Allow querying wallet apps -->
+	<key>LSApplicationQueriesSchemes</key>
+	<array>
+		<!-- Trust Wallet -->
+		<string>trust</string>
+		<string>trustwallet</string>
+		
+		<!-- MetaMask -->
+		<string>metamask</string>
+		
+		<!-- Rainbow -->
+		<string>rainbow</string>
+		
+		<!-- Generic WalletConnect -->
+		<string>wc</string>
+		<string>https</string>
+	</array>
+	
+	<!-- Deep Link Return (Optional - for returning to SmartRent) -->
+	<key>CFBundleURLTypes</key>
+	<array>
+		<dict>
+			<key>CFBundleTypeRole</key>
+			<string>Editor</string>
+			<key>CFBundleURLName</key>
+			<string>com.smartrent.app</string>
+			<key>CFBundleURLSchemes</key>
+			<array>
+				<string>smartrent</string>
+			</array>
+		</dict>
+	</array>
 </dict>
 </plist>

@@ -268,9 +268,28 @@ class CreateAssetRequest(BaseModel):
     owner_id: str  # UUID of the owner (from auth)
 
 
-@router.post("/", status_code=status.HTTP_201_CREATED)
+@router.post("/", status_code=status.HTTP_410_GONE, deprecated=True)
 async def create_asset(asset_request: CreateAssetRequest):
-    """Create a new asset"""
+    """
+    [DEPRECATED] Create a new asset
+    
+    ⚠️ This endpoint is deprecated and will be removed.
+    In decentralized architecture, assets are created directly on blockchain
+    via mobile app wallet interaction.
+    
+    Use: Mobile App → WalletConnect → Building1122.mintInitialSupply()
+    """
+    raise HTTPException(
+        status_code=status.HTTP_410_GONE,
+        detail={
+            "error": "Endpoint deprecated",
+            "message": "Asset creation now happens on blockchain via mobile app",
+            "migration": "Use mobile app wallet to call Building1122.mintInitialSupply()",
+            "contract": "0xeFbfFC198FfA373C26E64a426E8866B132d08ACB"
+        }
+    )
+    
+    # Old implementation kept for reference
     supabase = get_supabase_client()
     
     # Prepare location as JSONB if provided

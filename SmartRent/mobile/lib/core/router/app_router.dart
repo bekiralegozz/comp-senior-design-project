@@ -10,10 +10,10 @@ import '../../screens/home_screen.dart';
 import '../../screens/asset_details.dart';
 import '../../screens/rental_screen.dart';
 import '../../screens/profile_screen.dart';
-import '../../screens/assets/create_asset_screen.dart';
+import '../../screens/assets/create_asset_blockchain_screen.dart'; // UPDATED: Blockchain version
 import '../../screens/assets/my_assets_screen.dart';
 import '../../screens/rentals/rental_details_screen.dart';
-import '../../screens/rentals/create_rental_screen.dart';
+import '../../screens/rentals/pay_rent_blockchain_screen.dart'; // UPDATED: Blockchain version
 import '../../screens/wallet/wallet_screen.dart';
 import '../../screens/settings/settings_screen.dart';
 import '../providers/auth_provider.dart';
@@ -87,7 +87,7 @@ final goRouterProvider = Provider<GoRouter>((ref) {
         name: 'create-asset',
         pageBuilder: (context, state) => MaterialPage(
           key: state.pageKey,
-          child: const CreateAssetScreen(),
+          child: const CreateAssetBlockchainScreen(), // UPDATED: Blockchain version
         ),
       ),
       GoRoute(
@@ -120,13 +120,13 @@ final goRouterProvider = Provider<GoRouter>((ref) {
         ),
       ),
       GoRoute(
-        path: '/rentals/create/:assetId',
-        name: 'create-rental',
+        path: '/rentals/pay/:assetId', // UPDATED: Changed from 'create' to 'pay'
+        name: 'pay-rent',
         pageBuilder: (context, state) {
           final assetId = state.pathParameters['assetId']!;
           return MaterialPage(
             key: state.pageKey,
-            child: CreateRentalScreen(assetId: assetId),
+            child: PayRentBlockchainScreen(assetId: assetId), // UPDATED: Blockchain version
           );
         },
       ),
