@@ -1,9 +1,9 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.19;
 
-import "https://github.com/OpenZeppelin/openzeppelin-contracts/blob/v4.9.3/contracts/access/Ownable.sol";
-import "https://github.com/OpenZeppelin/openzeppelin-contracts/blob/v4.9.3/contracts/security/ReentrancyGuard.sol";
-import "https://github.com/OpenZeppelin/openzeppelin-contracts/blob/v4.9.3/contracts/security/Pausable.sol";
+import "@openzeppelin/contracts/access/Ownable.sol";
+import "@openzeppelin/contracts/utils/ReentrancyGuard.sol";
+import "@openzeppelin/contracts/utils/Pausable.sol";
 import "./Building1122.sol";
 
 /**
@@ -49,8 +49,9 @@ contract Marketplace is Ownable, ReentrancyGuard, Pausable {
      */
     constructor(
         address _buildingToken,
-        address _feeRecipient
-    ) Ownable() {
+        address _feeRecipient,
+        address initialOwner
+    ) Ownable(initialOwner) {
         require(_buildingToken != address(0), "Marketplace: buildingToken cannot be zero");
         require(_feeRecipient != address(0), "Marketplace: feeRecipient cannot be zero");
         

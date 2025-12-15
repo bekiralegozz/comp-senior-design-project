@@ -10,7 +10,7 @@ import uvicorn
 
 from app.core.config import settings
 from app.core.middleware import SupabaseAuthMiddleware
-from app.api.routes import assets, auth, rentals, users, iot_devices, blockchain
+from app.api.routes import assets, auth, rentals, users, iot_devices, blockchain, nft
 
 
 @asynccontextmanager
@@ -39,24 +39,23 @@ app = FastAPI(
 # In development, allow all localhost origins (for Flutter web random ports)
 if settings.ENVIRONMENT == "development":
     # Allow all localhost and 127.0.0.1 origins for development
-    cors_kwargs = {
-        "allow_origin_regex": r"http://localhost:\d+|http://127\.0\.0\.1:\d+",
-        "allow_credentials": True,
-        "allow_methods": ["*"],
-        "allow_headers": ["*"],
-    }
+    app.add_middleware(
+        CORSMiddleware,
+        allow_origin_regex=r"https?://localhost:\d+|https?://127\.0\.0\.1:\d+",
+        allow_credentials=True,
+        allow_methods=["*"],
+        allow_headers=["*"],
+        expose_headers=["*"],
+    )
 else:
-    cors_kwargs = {
-        "allow_origins": settings.ALLOWED_ORIGINS,
-        "allow_credentials": True,
-        "allow_methods": ["*"],
-        "allow_headers": ["*"],
-    }
-
-app.add_middleware(
-    CORSMiddleware,
-    **cors_kwargs
-)
+    app.add_middleware(
+        CORSMiddleware,
+        allow_origins=settings.ALLOWED_ORIGINS,
+        allow_credentials=True,
+        allow_methods=["*"],
+        allow_headers=["*"],
+        expose_headers=["*"],
+    )
 
 # Attach Supabase auth middleware (non-blocking by default)
 app.add_middleware(SupabaseAuthMiddleware)
@@ -88,6 +87,7 @@ app.include_router(rentals.router, prefix="/api/v1/rentals", tags=["Rentals"])
 app.include_router(users.router, prefix="/api/v1/users", tags=["Users"])
 app.include_router(iot_devices.router, prefix="/api/v1/iot", tags=["IoT Devices"])
 app.include_router(blockchain.router, prefix="/api/v1/blockchain", tags=["Blockchain (Read-Only)"])
+app.include_router(nft.router, tags=["NFT & Fractional Ownership"])
 
 
 if __name__ == "__main__":

@@ -1,9 +1,9 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.19;
 
-import "https://github.com/OpenZeppelin/openzeppelin-contracts/blob/v4.9.3/contracts/access/Ownable.sol";
-import "https://github.com/OpenZeppelin/openzeppelin-contracts/blob/v4.9.3/contracts/security/ReentrancyGuard.sol";
-import "https://github.com/OpenZeppelin/openzeppelin-contracts/blob/v4.9.3/contracts/security/Pausable.sol";
+import "@openzeppelin/contracts/access/Ownable.sol";
+import "@openzeppelin/contracts/utils/ReentrancyGuard.sol";
+import "@openzeppelin/contracts/utils/Pausable.sol";
 import "./Building1122.sol";
 
 /**
@@ -55,10 +55,12 @@ contract RentalManager is Ownable, ReentrancyGuard, Pausable {
     /**
      * @dev Constructor
      * @param _buildingToken Address of the Building1122 contract
+     * @param initialOwner Owner of the contract
      */
     constructor(
-        address _buildingToken
-    ) Ownable() {
+        address _buildingToken,
+        address initialOwner
+    ) Ownable(initialOwner) {
         require(_buildingToken != address(0), "RentalManager: buildingToken cannot be zero");
         
         buildingToken = Building1122(_buildingToken);

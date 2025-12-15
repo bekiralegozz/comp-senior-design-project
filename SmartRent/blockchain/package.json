@@ -1,25 +1,25 @@
 {
-  "name": "smartrent-blockchain-server",
+  "name": "smartrent-blockchain",
   "version": "1.0.0",
-  "description": "Blockchain Server for SmartRent - Processes chain_actions and listens to contract events",
-  "main": "src/index.js",
+  "description": "SmartRent Smart Contracts",
   "type": "module",
   "scripts": {
-    "start": "node src/index.js",
-    "dev": "node --watch src/index.js"
+    "compile": "hardhat compile",
+    "deploy": "hardhat run scripts/deploy.js --network polygon"
   },
   "keywords": [
     "blockchain",
     "ethereum",
-    "sepolia",
-    "smart-contracts"
+    "polygon",
+    "smart-contracts",
+    "nft"
   ],
   "author": "",
   "license": "MIT",
-  "dependencies": {
-    "ethers": "^6.13.0",
-    "@supabase/supabase-js": "^2.39.0",
-    "dotenv": "^16.4.1"
+  "devDependencies": {
+    "@nomicfoundation/hardhat-toolbox": "^5.0.0",
+    "@openzeppelin/contracts": "^5.0.0",
+    "dotenv": "^16.4.0",
+    "hardhat": "^2.22.0"
   }
 }
-

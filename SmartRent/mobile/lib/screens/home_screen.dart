@@ -2,12 +2,15 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:cached_network_image/cached_network_image.dart';
+import 'package:provider/provider.dart' as provider;
 
 import '../constants/config.dart';
 import '../services/models.dart';
 import '../services/api_service.dart';
 import '../components/asset_card.dart';
+import '../components/wallet_info_widget.dart';
 import '../core/providers/auth_provider.dart';
+import '../providers/wallet_provider.dart';
 
 /// Provider for featured assets
 final featuredAssetsProvider = FutureProvider<List<Asset>>((ref) async {
@@ -109,10 +112,14 @@ class _HomeScreenState extends ConsumerState<HomeScreen> with SingleTickerProvid
           IconButton(
             icon: const Icon(Icons.account_balance_wallet_outlined),
             onPressed: () {
-              // TODO: Show wallet connection status
-              ScaffoldMessenger.of(context).showSnackBar(
-                const SnackBar(content: Text('Wallet features coming soon!')),
-              );
+              context.go('/wallet-connection');
+            },
+          ),
+          IconButton(
+            icon: const Icon(Icons.token_outlined),
+            tooltip: 'NFT Gallery',
+            onPressed: () {
+              context.go('/nft-gallery');
             },
           ),
           PopupMenuButton<String>(
@@ -148,9 +155,23 @@ class _HomeScreenState extends ConsumerState<HomeScreen> with SingleTickerProvid
                 }
               } else if (value == 'settings') {
                 context.go('/settings');
+              } else if (value == 'nft-portfolio') {
+                final walletProvider = provider.Provider.of<WalletProvider>(context, listen: false);
+                final wallet = walletProvider.walletAddress ?? '';
+                context.go('/nft-portfolio?wallet=$wallet');
               }
             },
             itemBuilder: (context) => [
+              const PopupMenuItem(
+                value: 'nft-portfolio',
+                child: Row(
+                  children: [
+                    Icon(Icons.account_balance_wallet, size: 20),
+                    SizedBox(width: 8),
+                    Text('My NFT Portfolio'),
+                  ],
+                ),
+              ),
               const PopupMenuItem(
                 value: 'settings',
                 child: Row(
@@ -225,37 +246,47 @@ class _HomeScreenState extends ConsumerState<HomeScreen> with SingleTickerProvid
   }
 
   Widget _buildWelcomeHeader(ThemeData theme) {
-    return Container(
-      padding: const EdgeInsets.all(AppSpacing.lg),
-      decoration: BoxDecoration(
-        gradient: LinearGradient(
-          colors: [
-            AppColors.primary.withOpacity(0.1),
-            AppColors.secondary.withOpacity(0.1),
-          ],
-          begin: Alignment.topLeft,
-          end: Alignment.bottomRight,
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        // Wallet Info Widget
+        const WalletInfoWidget(),
+        const SizedBox(height: AppSpacing.md),
+        
+        // Welcome Banner
+        Container(
+          padding: const EdgeInsets.all(AppSpacing.lg),
+          decoration: BoxDecoration(
+            gradient: LinearGradient(
+              colors: [
+                AppColors.primary.withOpacity(0.1),
+                AppColors.secondary.withOpacity(0.1),
+              ],
+              begin: Alignment.topLeft,
+              end: Alignment.bottomRight,
+            ),
+            borderRadius: BorderRadius.circular(AppRadius.md),
+          ),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                'Welcome to SmartRent',
+                style: theme.textTheme.headlineSmall?.copyWith(
+                  fontWeight: FontWeight.bold,
+                ),
+              ),
+              const SizedBox(height: AppSpacing.sm),
+              Text(
+                'Rent anything, anywhere, anytime with blockchain security',
+                style: theme.textTheme.bodyMedium?.copyWith(
+                  color: AppColors.darkGrey,
+                ),
+              ),
+            ],
+          ),
         ),
-        borderRadius: BorderRadius.circular(AppRadius.md),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Text(
-            'Welcome to SmartRent',
-            style: theme.textTheme.headlineSmall?.copyWith(
-              fontWeight: FontWeight.bold,
-            ),
-          ),
-          const SizedBox(height: AppSpacing.sm),
-          Text(
-            'Rent anything, anywhere, anytime with blockchain security',
-            style: theme.textTheme.bodyMedium?.copyWith(
-              color: AppColors.darkGrey,
-            ),
-          ),
-        ],
-      ),
+      ],
     );
   }
 
@@ -575,6 +606,36 @@ class _HomeScreenState extends ConsumerState<HomeScreen> with SingleTickerProvid
                 Icons.receipt_long_outlined,
                 AppColors.secondary,
                 () => context.go('/rentals'),
+              ),
+            ),
+          ],
+        ),
+        const SizedBox(height: AppSpacing.sm),
+        Row(
+          children: [
+            Expanded(
+              child: _buildActionButton(
+                theme,
+                'NFT Gallery',
+                Icons.collections_outlined,
+                Colors.purple,
+                () {
+                  context.go('/nft-gallery');
+                },
+              ),
+            ),
+            const SizedBox(width: AppSpacing.sm),
+            Expanded(
+              child: _buildActionButton(
+                theme,
+                'My NFTs',
+                Icons.account_balance_wallet,
+                Colors.green,
+                () {
+                  final walletProvider = provider.Provider.of<WalletProvider>(context, listen: false);
+                  final wallet = walletProvider.walletAddress ?? '';
+                  context.go('/nft-portfolio?wallet=$wallet');
+                },
               ),
             ),
           ],

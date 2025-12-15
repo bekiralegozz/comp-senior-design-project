@@ -29,14 +29,31 @@ class Settings(BaseSettings):
         env="DATABASE_URL"
     )
     
-    # Blockchain/Web3
+    # Blockchain/Web3 - Polygon Mainnet
     WEB3_PROVIDER_URL: str = Field(
-        default="https://goerli.infura.io/v3/YOUR_INFURA_PROJECT_ID",
+        default="https://polygon-rpc.com",
         env="WEB3_PROVIDER_URL"
     )
+    POLYGON_CHAIN_ID: int = Field(default=137, env="POLYGON_CHAIN_ID")
+    WALLET_PRIVATE_KEY: str = Field(default="", env="WALLET_PRIVATE_KEY")
+    CONTRACT_OWNER_ADDRESS: str = Field(default="", env="CONTRACT_OWNER_ADDRESS")
+    
+    # Smart Contract Addresses (from deployment)
+    BUILDING1122_CONTRACT_ADDRESS: str = Field(default="", env="BUILDING1122_CONTRACT_ADDRESS")
+    MARKETPLACE_CONTRACT_ADDRESS: str = Field(default="", env="MARKETPLACE_CONTRACT_ADDRESS")
+    RENTAL_MANAGER_CONTRACT_ADDRESS: str = Field(default="", env="RENTAL_MANAGER_CONTRACT_ADDRESS")
+    
+    # Legacy (keep for backwards compatibility)
     PRIVATE_KEY: str = Field(default="", env="PRIVATE_KEY")
     CONTRACT_ADDRESS_ASSET_TOKEN: str = Field(default="", env="CONTRACT_ADDRESS_ASSET_TOKEN")
     CONTRACT_ADDRESS_RENTAL_AGREEMENT: str = Field(default="", env="CONTRACT_ADDRESS_RENTAL_AGREEMENT")
+    
+    # IPFS/Pinata Configuration
+    PINATA_API_KEY: str = Field(default="", env="PINATA_API_KEY")
+    PINATA_SECRET_KEY: str = Field(default="", env="PINATA_SECRET_KEY")
+    
+    # OpenSea
+    OPENSEA_API_KEY: str = Field(default="", env="OPENSEA_API_KEY")
     
     # Security
     SECRET_KEY: str = Field(

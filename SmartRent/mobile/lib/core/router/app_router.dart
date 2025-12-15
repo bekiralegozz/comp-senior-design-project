@@ -10,11 +10,14 @@ import '../../screens/home_screen.dart';
 import '../../screens/asset_details.dart';
 import '../../screens/rental_screen.dart';
 import '../../screens/profile_screen.dart';
-import '../../screens/assets/create_asset_blockchain_screen.dart'; // UPDATED: Blockchain version
+import '../../screens/assets/create_asset_blockchain_screen.dart';
 import '../../screens/assets/my_assets_screen.dart';
 import '../../screens/rentals/rental_details_screen.dart';
-import '../../screens/rentals/pay_rent_blockchain_screen.dart'; // UPDATED: Blockchain version
+import '../../screens/rentals/pay_rent_blockchain_screen.dart';
 import '../../screens/wallet/wallet_screen.dart';
+import '../../screens/wallet/wallet_connection_screen.dart';
+import '../../screens/nft/nft_gallery_screen.dart';
+import '../../screens/nft/nft_portfolio_screen.dart';
 import '../../screens/settings/settings_screen.dart';
 import '../providers/auth_provider.dart';
 
@@ -150,6 +153,35 @@ final goRouterProvider = Provider<GoRouter>((ref) {
           key: state.pageKey,
           child: const WalletScreen(),
         ),
+      ),
+      GoRoute(
+        path: '/wallet-connection',
+        name: 'wallet-connection',
+        pageBuilder: (context, state) => MaterialPage(
+          key: state.pageKey,
+          child: const WalletConnectionScreen(),
+        ),
+      ),
+
+      // NFT Routes
+      GoRoute(
+        path: '/nft-gallery',
+        name: 'nft-gallery',
+        pageBuilder: (context, state) => MaterialPage(
+          key: state.pageKey,
+          child: const NftGalleryScreen(),
+        ),
+      ),
+      GoRoute(
+        path: '/nft-portfolio',
+        name: 'nft-portfolio',
+        pageBuilder: (context, state) {
+          final walletAddress = state.uri.queryParameters['wallet'];
+          return MaterialPage(
+            key: state.pageKey,
+            child: NftPortfolioScreen(walletAddress: walletAddress),
+          );
+        },
       ),
 
       // Profile & Settings

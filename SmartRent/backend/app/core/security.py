@@ -101,3 +101,19 @@ def extract_bearer_token(authorization_header: Optional[str]) -> str:
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Missing bearer token")
     return token
 
+
+async def get_current_user(authorization: Optional[str] = None) -> Dict[str, Any]:
+    """
+    Dependency to extract and verify the current user from JWT token.
+    Used in FastAPI route dependencies.
+    """
+    if not authorization:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Not authenticated",
+            headers={"WWW-Authenticate": "Bearer"},
+        )
+    
+    token = extract_bearer_token(authorization)
+    claims = await verify_supabase_jwt(token)
+    return claims

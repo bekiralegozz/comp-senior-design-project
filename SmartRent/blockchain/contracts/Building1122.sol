@@ -1,9 +1,11 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.19;
 
-import "https://github.com/OpenZeppelin/openzeppelin-contracts/blob/v4.9.3/contracts/token/ERC1155/ERC1155.sol";
-import "https://github.com/OpenZeppelin/openzeppelin-contracts/blob/v4.9.3/contracts/access/Ownable.sol";
-import "https://github.com/OpenZeppelin/openzeppelin-contracts/blob/v4.9.3/contracts/security/Pausable.sol";
+import "@openzeppelin/contracts/token/ERC1155/ERC1155.sol";
+import "@openzeppelin/contracts/access/Ownable.sol";
+import "@openzeppelin/contracts/utils/Pausable.sol";
+import "@openzeppelin/contracts/interfaces/IERC2981.sol";
+import "@openzeppelin/contracts/utils/Strings.sol";
 
 /**
  * @title Building1122
@@ -21,7 +23,13 @@ import "https://github.com/OpenZeppelin/openzeppelin-contracts/blob/v4.9.3/contr
  * - Investor B: balanceOf(B, 1) = 300 → 30% ownership
  * - Investor C: balanceOf(C, 1) = 300 → 30% ownership
  */
-contract Building1122 is ERC1155, Ownable, Pausable {
+contract Building1122 is ERC1155, Ownable, Pausable, IERC2981 {
+    
+    using Strings for uint256;
+    
+    // Royalty info
+    address public royaltyReceiver;
+    uint96 public royaltyBasisPoints = 250; // 2.5% default
     
     // Mapping from tokenId to total supply (fixed at minting)
     mapping(uint256 => uint256) public totalSupply;
@@ -45,9 +53,10 @@ contract Building1122 is ERC1155, Ownable, Pausable {
     /**
      * @dev Constructor
      * @param uri_ Base URI for token metadata (can be empty string if not using URI)
+     * @param initialOwner Owner of the contract
      */
-    constructor(string memory uri_) ERC1155(uri_) {
-        // Contract owner is set automatically by Ownable
+    constructor(string memory uri_, address initialOwner) ERC1155(uri_) Ownable(initialOwner) {
+        royaltyReceiver = initialOwner;
     }
     
     /**
@@ -124,17 +133,15 @@ contract Building1122 is ERC1155, Ownable, Pausable {
     }
     
     /**
-     * @dev Override _beforeTokenTransfer to add pause functionality
+     * @dev Override _update to add pause functionality
      */
-    function _beforeTokenTransfer(
-        address operator,
+    function _update(
         address from,
         address to,
         uint256[] memory ids,
-        uint256[] memory amounts,
-        bytes memory data
+        uint256[] memory values
     ) internal override whenNotPaused {
-        super._beforeTokenTransfer(operator, from, to, ids, amounts, data);
+        super._update(from, to, ids, values);
     }
     
     /**
@@ -157,6 +164,66 @@ contract Building1122 is ERC1155, Ownable, Pausable {
      */
     function setURI(string memory newuri) external onlyOwner {
         _setURI(newuri);
+    }
+    
+    /**
+     * @dev Override uri function for OpenSea compatibility
+     * Returns IPFS URI for specific token metadata
+     */
+    function uri(uint256 tokenId) public view override returns (string memory) {
+        require(tokenInitialized[tokenId], "Building1122: URI query for nonexistent token");
+        
+        // If asset has custom metadata URI, return it
+        if (bytes(assetMetadataURI[tokenId]).length > 0) {
+            return assetMetadataURI[tokenId];
+        }
+        
+        // Otherwise construct from base URI
+        return string(abi.encodePacked(super.uri(tokenId), tokenId.toString(), ".json"));
+    }
+    
+    /**
+     * @dev EIP-2981 Royalty Standard Implementation
+     * OpenSea will call this to determine royalty payments
+     */
+    function royaltyInfo(uint256 tokenId, uint256 salePrice)
+        external
+        view
+        override
+        returns (address receiver, uint256 royaltyAmount)
+    {
+        require(tokenInitialized[tokenId], "Building1122: Royalty query for nonexistent token");
+        
+        uint256 royalty = (salePrice * royaltyBasisPoints) / 10000;
+        return (royaltyReceiver, royalty);
+    }
+    
+    /**
+     * @dev Set royalty receiver address
+     */
+    function setRoyaltyReceiver(address newReceiver) external onlyOwner {
+        require(newReceiver != address(0), "Building1122: Invalid receiver");
+        royaltyReceiver = newReceiver;
+    }
+    
+    /**
+     * @dev Set royalty percentage (in basis points, e.g., 250 = 2.5%)
+     */
+    function setRoyaltyBasisPoints(uint96 newBasisPoints) external onlyOwner {
+        require(newBasisPoints <= 1000, "Building1122: Royalty too high (max 10%)");
+        royaltyBasisPoints = newBasisPoints;
+    }
+    
+    /**
+     * @dev ERC165 support for multiple interfaces
+     */
+    function supportsInterface(bytes4 interfaceId)
+        public
+        view
+        override(ERC1155, IERC165)
+        returns (bool)
+    {
+        return interfaceId == type(IERC2981).interfaceId || super.supportsInterface(interfaceId);
     }
 }
 

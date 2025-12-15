@@ -7,18 +7,26 @@ class AppConfig {
   static const String apiVersion = 'v1';
   static const String apiBaseUrl = '$baseUrl/api/$apiVersion';
   
-  // Blockchain Configuration
-  static const String chainId = '11155111'; // Sepolia testnet
-  static const String rpcUrl = 'https://sepolia.infura.io/v3/YOUR_PROJECT_ID';
-  static const String wsUrl = 'wss://sepolia.infura.io/ws/v3/YOUR_PROJECT_ID';
+  // Blockchain Configuration - Polygon Mainnet
+  static const String chainId = '137'; // Polygon Mainnet
+  static const String rpcUrl = 'https://polygon-rpc.com';
+  static const String polygonRpcUrl = rpcUrl; // Alias for clarity
+  static const String wsUrl = 'wss://polygon-rpc.com';
   static const String web3ProviderUrl = rpcUrl;
+  static const String networkName = 'Polygon';
+  static const String currencySymbol = 'MATIC';
   
   // WalletConnect Configuration
   static const String walletConnectProjectId = 'YOUR_WALLETCONNECT_PROJECT_ID';
   
-  // Contract Addresses (Update after deployment)
-  static const String assetTokenContract = '0x...'; // AssetToken contract address
-  static const String rentalAgreementContract = '0x...'; // RentalAgreement contract address
+  // Contract Addresses - DEPLOYED ON POLYGON MAINNET
+  static const String building1122Contract = '0x6D13FAC94C36d7f23d707514ae1Bc66AF5045f05';
+  static const String marketplaceContract = '0xEde820A58bE5367Fa74dC95b5Cfa924990a83c1B';
+  static const String rentalManagerContract = '0xa7D86DFc79fb2694C933B72675A405Ed00125760';
+  
+  // Legacy contract names (for backward compatibility)
+  static const String assetTokenContract = building1122Contract;
+  static const String rentalAgreementContract = rentalManagerContract;
   
   // App Configuration
   static const String appName = 'SmartRent';
