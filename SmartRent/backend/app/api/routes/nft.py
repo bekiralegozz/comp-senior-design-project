@@ -12,7 +12,8 @@ from pathlib import Path
 
 from app.services.web3_service import web3_service
 from app.services.ipfs_service import ipfs_service
-from app.services.alchemy_service import alchemy_service
+from app.services.smartrenthub_service import smartrenthub_service
+# DEPRECATED: alchemy_service - now using SmartRentHub for on-chain data
 
 # DEPRECATED: Supabase auth removed, SIWE coming in Faz 2
 # from app.core.security import get_current_user
@@ -426,40 +427,28 @@ async def mint_nft(request: MintNFTRequest):
 @router.get("/holdings/{wallet_address}")
 async def get_user_holdings(wallet_address: str):
     """
-    Get user's NFT holdings for Building1122 contract
-    Uses Alchemy NFT API for reliable ownership data
+    Get user's NFT holdings from SmartRentHub registry
+    Uses on-chain data from SmartRentHub.getAssetsByOwner()
     """
     try:
-        response = await alchemy_service.get_nfts_for_owner(
-            owner_address=wallet_address,
-            contract_address=web3_service.building_address
-        )
-        
-        # Alchemy returns {"ownedNfts": [...], "totalCount": ...}
-        nfts = response.get("ownedNfts", [])
+        # Get assets from SmartRentHub (includes balance)
+        assets = smartrenthub_service.get_assets_by_owner(wallet_address)
         
         # Transform to UserNftHolding format expected by Flutter
         holdings = []
-        for nft in nfts:
-            token_id = int(nft.get("tokenId", 0))
-            balance = int(nft.get("balance", "1"))
+        for asset in assets:
+            token_id = asset["token_id"]
+            balance = asset.get("balance", 0)
+            total_shares = asset.get("total_shares", 1000)
             
-            # Get metadata
-            name = nft.get("name", "") or nft.get("title", "") or f"Asset #{token_id}"
-            image_url = ""
-            if nft.get("image"):
-                image_url = nft["image"].get("cachedUrl") or nft["image"].get("originalUrl", "")
-            elif nft.get("raw", {}).get("metadata", {}).get("image"):
-                image_url = nft["raw"]["metadata"]["image"]
+            # Fetch metadata from IPFS
+            metadata = await smartrenthub_service.fetch_metadata(asset["metadata_uri"])
+            name = metadata.get("name", f"Asset #{token_id}") if metadata else f"Asset #{token_id}"
+            image_url = metadata.get("image", "") if metadata else ""
             
-            # Get total supply from contract
-            try:
-                total_shares = web3_service.w3.eth.contract(
-                    address=web3_service.building_address,
-                    abi=web3_service.building_abi
-                ).functions.totalSupply(token_id).call()
-            except:
-                total_shares = 1000  # Default
+            # Convert IPFS image URL
+            if image_url.startswith("ipfs://"):
+                image_url = image_url.replace("ipfs://", "https://ipfs.io/ipfs/")
             
             holdings.append({
                 "token_id": token_id,
@@ -467,8 +456,8 @@ async def get_user_holdings(wallet_address: str):
                 "image_url": image_url,
                 "shares": balance,
                 "total_shares": total_shares,
-                "ownership_percentage": (balance / total_shares * 100) if total_shares > 0 else 0,
-                "estimated_value": "0"  # TODO: Add price oracle
+                "ownership_percentage": asset.get("ownership_percentage", 0),
+                "estimated_value": "0"  # TODO: Add price from listings
             })
         
         return holdings
@@ -488,28 +477,45 @@ async def list_assets(
     owner_address: Optional[str] = None
 ):
     """
-    Get list of NFT assets
+    Get list of NFT assets from SmartRentHub registry
     
     If owner_address provided, returns assets owned by that address.
-    Otherwise returns recent mints (from blockchain events).
+    Otherwise returns all registered assets.
     """
     try:
-        # If owner filter exists, use Alchemy (reliable ownership, includes transfers)
         if owner_address:
-            return await alchemy_service.owner_assets_smartrent_shape(
-                owner_address=owner_address,
-                contract_address=web3_service.building_address,
-                limit=limit,
-            )
-
-        # No owner filter: this endpoint will be repurposed for Marketplace listings.
-        # For now, return empty to avoid showing all minted tokens (as requested).
+            # Get assets for specific owner
+            assets = smartrenthub_service.get_assets_by_owner(owner_address)
+        else:
+            # Get all registered assets
+            assets = smartrenthub_service.get_all_assets()
+        
+        # Transform and fetch metadata
+        result_assets = []
+        for asset in assets[offset:offset+limit]:
+            token_id = asset["token_id"]
+            
+            # Fetch metadata from IPFS
+            metadata = await smartrenthub_service.fetch_metadata(asset["metadata_uri"])
+            
+            result_assets.append({
+                "token_id": token_id,
+                "name": metadata.get("name", f"Asset #{token_id}") if metadata else f"Asset #{token_id}",
+                "description": metadata.get("description", "") if metadata else "",
+                "image_url": metadata.get("image", "").replace("ipfs://", "https://ipfs.io/ipfs/") if metadata else "",
+                "total_shares": asset.get("total_shares", 1000),
+                "balance": asset.get("balance", 0),  # Only for owner queries
+                "ownership_percentage": asset.get("ownership_percentage", 0),
+                "owners_count": len(asset.get("owners", [])),
+                "metadata_uri": asset["metadata_uri"],
+                "opensea_url": f"https://opensea.io/assets/matic/{web3_service.building_address}/{token_id}"
+            })
+        
         return {
-            "assets": [],
-            "total": 0,
+            "assets": result_assets,
+            "total": len(assets),
             "limit": limit,
-            "offset": offset,
-            "message": "Marketplace listings coming soon. Provide owner_address to list your NFTs.",
+            "offset": offset
         }
             
     except Exception as e:
@@ -681,6 +687,233 @@ async def test_ipfs():
         
     except Exception as e:
         logger.error(f"Error testing IPFS: {str(e)}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=str(e)
+        )
+
+
+# ==================== Marketplace Endpoints (SmartRentHub) ====================
+
+class CreateListingRequest(BaseModel):
+    """Request to create a new marketplace listing"""
+    token_id: int = Field(..., description="Token ID to list")
+    shares_for_sale: int = Field(..., description="Number of shares to sell")
+    price_per_share_pol: float = Field(..., description="Price per share in POL")
+
+
+class BuyListingRequest(BaseModel):
+    """Request to buy from a listing"""
+    listing_id: int = Field(..., description="Listing ID to buy from")
+    shares_to_buy: int = Field(..., description="Number of shares to buy")
+
+
+@router.get("/listings")
+async def get_active_listings():
+    """
+    Get all active marketplace listings from SmartRentHub
+    """
+    try:
+        listings = smartrenthub_service.get_active_listings()
+        
+        # Enrich with metadata
+        enriched_listings = []
+        for listing in listings:
+            # Get asset info
+            asset = smartrenthub_service.get_asset(listing["token_id"])
+            
+            # Fetch metadata
+            metadata = None
+            if asset:
+                metadata = await smartrenthub_service.fetch_metadata(asset["metadata_uri"])
+            
+            enriched_listings.append({
+                **listing,
+                "asset_name": metadata.get("name", f"Asset #{listing['token_id']}") if metadata else f"Asset #{listing['token_id']}",
+                "asset_image": metadata.get("image", "").replace("ipfs://", "https://ipfs.io/ipfs/") if metadata else "",
+                "total_shares": asset.get("total_shares", 1000) if asset else 1000
+            })
+        
+        return {
+            "listings": enriched_listings,
+            "total": len(enriched_listings)
+        }
+        
+    except Exception as e:
+        logger.error(f"Error getting listings: {e}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to get listings: {str(e)}"
+        )
+
+
+@router.get("/listings/{listing_id}")
+async def get_listing(listing_id: int):
+    """Get single listing details"""
+    try:
+        listing = smartrenthub_service.get_listing(listing_id)
+        
+        if not listing:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail=f"Listing {listing_id} not found"
+            )
+        
+        # Get asset info and metadata
+        asset = smartrenthub_service.get_asset(listing["token_id"])
+        metadata = None
+        if asset:
+            metadata = await smartrenthub_service.fetch_metadata(asset["metadata_uri"])
+        
+        return {
+            **listing,
+            "asset_name": metadata.get("name", f"Asset #{listing['token_id']}") if metadata else f"Asset #{listing['token_id']}",
+            "asset_image": metadata.get("image", "").replace("ipfs://", "https://ipfs.io/ipfs/") if metadata else "",
+            "total_shares": asset.get("total_shares", 1000) if asset else 1000
+        }
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error getting listing {listing_id}: {e}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=str(e)
+        )
+
+
+@router.get("/listings/seller/{seller_address}")
+async def get_seller_listings(seller_address: str):
+    """Get all active listings by a seller"""
+    try:
+        listings = smartrenthub_service.get_listings_by_seller(seller_address)
+        
+        return {
+            "listings": listings,
+            "total": len(listings)
+        }
+        
+    except Exception as e:
+        logger.error(f"Error getting seller listings: {e}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=str(e)
+        )
+
+
+@router.post("/listings/prepare-create")
+async def prepare_create_listing(request: CreateListingRequest):
+    """
+    Prepare createListing transaction for user to sign
+    
+    User must first approve SmartRentHub to transfer their shares:
+    Building1122.setApprovalForAll(SmartRentHub, true)
+    """
+    try:
+        result = smartrenthub_service.prepare_create_listing(
+            token_id=request.token_id,
+            shares_for_sale=request.shares_for_sale,
+            price_per_share_pol=request.price_per_share_pol
+        )
+        
+        if not result["success"]:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=result.get("error", "Failed to prepare listing")
+            )
+        
+        return {
+            **result,
+            "message": "Transaction prepared. User must sign with wallet.",
+            "note": "Make sure to approve SmartRentHub contract first using setApprovalForAll"
+        }
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error preparing create listing: {e}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=str(e)
+        )
+
+
+@router.post("/listings/prepare-cancel")
+async def prepare_cancel_listing(listing_id: int):
+    """Prepare cancelListing transaction for user to sign"""
+    try:
+        result = smartrenthub_service.prepare_cancel_listing(listing_id)
+        
+        if not result["success"]:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=result.get("error", "Failed to prepare cancel")
+            )
+        
+        return {
+            **result,
+            "message": "Transaction prepared. User must sign with wallet."
+        }
+        
+    except Exception as e:
+        logger.error(f"Error preparing cancel listing: {e}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=str(e)
+        )
+
+
+@router.post("/listings/prepare-buy")
+async def prepare_buy_listing(request: BuyListingRequest):
+    """
+    Prepare buyFromListing transaction for user to sign
+    
+    Returns transaction data including the POL value to send
+    """
+    try:
+        # Get listing to get price
+        listing = smartrenthub_service.get_listing(request.listing_id)
+        
+        if not listing:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail=f"Listing {request.listing_id} not found"
+            )
+        
+        if not listing["is_active"]:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Listing is not active"
+            )
+        
+        if request.shares_to_buy > listing["shares_remaining"]:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=f"Not enough shares available. Remaining: {listing['shares_remaining']}"
+            )
+        
+        result = smartrenthub_service.prepare_buy_listing(
+            listing_id=request.listing_id,
+            shares_to_buy=request.shares_to_buy,
+            price_per_share_wei=listing["price_per_share"]
+        )
+        
+        if not result["success"]:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=result.get("error", "Failed to prepare buy")
+            )
+        
+        return {
+            **result,
+            "listing": listing,
+            "message": f"Transaction prepared. Send {result['value_pol']} POL with transaction."
+        }
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error preparing buy listing: {e}")
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=str(e)

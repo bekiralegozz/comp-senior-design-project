@@ -45,10 +45,13 @@ class Settings(BaseSettings):
     WALLET_PRIVATE_KEY: str = Field(default="", env="WALLET_PRIVATE_KEY")
     CONTRACT_OWNER_ADDRESS: str = Field(default="", env="CONTRACT_OWNER_ADDRESS")
     
-    # Smart Contract Addresses (from deployment)
+    # Smart Contract Addresses (from deployment - 18 Aralık 2025)
+    SMARTRENTHUB_CONTRACT_ADDRESS: str = Field(default="", env="SMARTRENTHUB_CONTRACT_ADDRESS")
     BUILDING1122_CONTRACT_ADDRESS: str = Field(default="", env="BUILDING1122_CONTRACT_ADDRESS")
-    MARKETPLACE_CONTRACT_ADDRESS: str = Field(default="", env="MARKETPLACE_CONTRACT_ADDRESS")
     RENTAL_MANAGER_CONTRACT_ADDRESS: str = Field(default="", env="RENTAL_MANAGER_CONTRACT_ADDRESS")
+    
+    # DEPRECATED: Old Marketplace (now using SmartRentHub)
+    MARKETPLACE_CONTRACT_ADDRESS: str = Field(default="", env="MARKETPLACE_CONTRACT_ADDRESS")
     
     # Legacy (keep for backwards compatibility)
     PRIVATE_KEY: str = Field(default="", env="PRIVATE_KEY")

@@ -265,6 +265,128 @@ class ApiService {
   }
 
   // ============================================
+  // USER HOLDINGS
+  // ============================================
+
+  /// Get user's NFT holdings from SmartRentHub
+  Future<List<dynamic>> getUserHoldings(String walletAddress) async {
+    try {
+      final response = await dio.get('/nft/holdings/$walletAddress');
+      return response.data as List<dynamic>;
+    } catch (e) {
+      throw ApiException(
+        'Failed to get holdings: ${e.toString()}',
+        type: ApiExceptionType.unknown,
+      );
+    }
+  }
+
+  // ============================================
+  // MARKETPLACE ENDPOINTS (SmartRentHub)
+  // ============================================
+
+  /// Get all active marketplace listings
+  Future<Map<String, dynamic>> getListings() async {
+    try {
+      final response = await dio.get('/nft/listings');
+      return response.data as Map<String, dynamic>;
+    } catch (e) {
+      throw ApiException(
+        'Failed to get listings: ${e.toString()}',
+        type: ApiExceptionType.unknown,
+      );
+    }
+  }
+
+  /// Get single listing details
+  Future<Map<String, dynamic>> getListing(int listingId) async {
+    try {
+      final response = await dio.get('/nft/listings/$listingId');
+      return response.data as Map<String, dynamic>;
+    } catch (e) {
+      throw ApiException(
+        'Failed to get listing: ${e.toString()}',
+        type: ApiExceptionType.unknown,
+      );
+    }
+  }
+
+  /// Get listings by seller
+  Future<Map<String, dynamic>> getMyListings(String sellerAddress) async {
+    try {
+      final response = await dio.get('/nft/listings/seller/$sellerAddress');
+      return response.data as Map<String, dynamic>;
+    } catch (e) {
+      throw ApiException(
+        'Failed to get my listings: ${e.toString()}',
+        type: ApiExceptionType.unknown,
+      );
+    }
+  }
+
+  /// Prepare createListing transaction
+  Future<Map<String, dynamic>> prepareCreateListing({
+    required int tokenId,
+    required int sharesForSale,
+    required double pricePerSharePol,
+  }) async {
+    try {
+      final response = await dio.post(
+        '/nft/listings/prepare-create',
+        data: {
+          'token_id': tokenId,
+          'shares_for_sale': sharesForSale,
+          'price_per_share_pol': pricePerSharePol,
+        },
+      );
+      return response.data as Map<String, dynamic>;
+    } catch (e) {
+      throw ApiException(
+        'Failed to prepare listing: ${e.toString()}',
+        type: ApiExceptionType.unknown,
+      );
+    }
+  }
+
+  /// Prepare cancelListing transaction
+  Future<Map<String, dynamic>> prepareCancelListing(int listingId) async {
+    try {
+      final response = await dio.post(
+        '/nft/listings/prepare-cancel',
+        queryParameters: {'listing_id': listingId},
+      );
+      return response.data as Map<String, dynamic>;
+    } catch (e) {
+      throw ApiException(
+        'Failed to prepare cancel: ${e.toString()}',
+        type: ApiExceptionType.unknown,
+      );
+    }
+  }
+
+  /// Prepare buyFromListing transaction
+  Future<Map<String, dynamic>> prepareBuyListing({
+    required int listingId,
+    required int sharesToBuy,
+  }) async {
+    try {
+      final response = await dio.post(
+        '/nft/listings/prepare-buy',
+        data: {
+          'listing_id': listingId,
+          'shares_to_buy': sharesToBuy,
+        },
+      );
+      return response.data as Map<String, dynamic>;
+    } catch (e) {
+      throw ApiException(
+        'Failed to prepare buy: ${e.toString()}',
+        type: ApiExceptionType.unknown,
+      );
+    }
+  }
+
+  // ============================================
   // HEALTH CHECK
   // ============================================
 

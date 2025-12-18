@@ -1,10 +1,14 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../services/nft_service.dart';
 import '../../services/nft_models.dart';
+import '../../services/api_service.dart';
+import '../../core/providers/wallet_provider.dart';
 import '../../constants/config.dart';
+import 'package:web3dart/web3dart.dart';
 
-class NftPortfolioScreen extends StatefulWidget {
+class NftPortfolioScreen extends ConsumerStatefulWidget {
   final String? walletAddress;
 
   const NftPortfolioScreen({
@@ -13,10 +17,10 @@ class NftPortfolioScreen extends StatefulWidget {
   }) : super(key: key);
 
   @override
-  State<NftPortfolioScreen> createState() => _NftPortfolioScreenState();
+  ConsumerState<NftPortfolioScreen> createState() => _NftPortfolioScreenState();
 }
 
-class _NftPortfolioScreenState extends State<NftPortfolioScreen> {
+class _NftPortfolioScreenState extends ConsumerState<NftPortfolioScreen> {
   final NftService _nftService = NftService();
   List<UserNftHolding> _holdings = [];
   bool _isLoading = true;
@@ -384,12 +388,249 @@ class _NftPortfolioScreenState extends State<NftPortfolioScreen> {
   }
 
   void _sellShares(UserNftHolding holding) {
-    // TODO: Implement sell shares dialog
+    final sharesController = TextEditingController();
+    final priceController = TextEditingController();
+    final formKey = GlobalKey<FormState>();
+    bool isLoading = false;
+
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      builder: (context) => StatefulBuilder(
+        builder: (context, setModalState) => Container(
+          padding: EdgeInsets.only(
+            bottom: MediaQuery.of(context).viewInsets.bottom,
+          ),
+          decoration: const BoxDecoration(
+            color: Colors.white,
+            borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+          ),
+          child: Padding(
+            padding: const EdgeInsets.all(24),
+            child: Form(
+              key: formKey,
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  // Handle bar
+                  Center(
+                    child: Container(
+                      width: 40,
+                      height: 4,
+                      margin: const EdgeInsets.only(bottom: 20),
+                      decoration: BoxDecoration(
+                        color: Colors.grey[300],
+                        borderRadius: BorderRadius.circular(2),
+                      ),
+                    ),
+                  ),
+                  
+                  // Title
+                  Text(
+                    'Sell ${holding.name}',
+                    style: const TextStyle(
+                      fontSize: 20,
+                      fontWeight: FontWeight.bold,
+                    ),
+                  ),
+                  const SizedBox(height: 8),
+                  Text(
+                    'Available: ${holding.shares} shares (${holding.ownershipPercentage.toStringAsFixed(1)}%)',
+                    style: TextStyle(color: Colors.grey[600]),
+                  ),
+                  const SizedBox(height: 24),
+                  
+                  // Shares input
+                  TextFormField(
+                    controller: sharesController,
+                    keyboardType: TextInputType.number,
+                    decoration: InputDecoration(
+                      labelText: 'Shares to sell',
+                      hintText: 'Max: ${holding.shares}',
+                      border: const OutlineInputBorder(),
+                      suffixText: 'shares',
+                    ),
+                    validator: (value) {
+                      if (value == null || value.isEmpty) {
+                        return 'Enter number of shares';
+                      }
+                      final shares = int.tryParse(value);
+                      if (shares == null || shares <= 0) {
+                        return 'Enter a valid number';
+                      }
+                      if (shares > holding.shares) {
+                        return 'Max ${holding.shares} shares';
+                      }
+                      return null;
+                    },
+                  ),
+                  const SizedBox(height: 16),
+                  
+                  // Price input
+                  TextFormField(
+                    controller: priceController,
+                    keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                    decoration: const InputDecoration(
+                      labelText: 'Price per share',
+                      hintText: '0.001',
+                      border: OutlineInputBorder(),
+                      suffixText: 'POL',
+                    ),
+                    validator: (value) {
+                      if (value == null || value.isEmpty) {
+                        return 'Enter price per share';
+                      }
+                      final price = double.tryParse(value);
+                      if (price == null || price <= 0) {
+                        return 'Enter a valid price';
+                      }
+                      return null;
+                    },
+                  ),
+                  const SizedBox(height: 24),
+                  
+                  // Summary
+                  if (sharesController.text.isNotEmpty && priceController.text.isNotEmpty)
+                    Container(
+                      padding: const EdgeInsets.all(12),
+                      decoration: BoxDecoration(
+                        color: Colors.blue.shade50,
+                        borderRadius: BorderRadius.circular(8),
+                      ),
+                      child: Row(
+                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                        children: [
+                          const Text('Total Value:'),
+                          Text(
+                            '${((int.tryParse(sharesController.text) ?? 0) * (double.tryParse(priceController.text) ?? 0)).toStringAsFixed(4)} POL',
+                            style: const TextStyle(
+                              fontWeight: FontWeight.bold,
+                              fontSize: 16,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  const SizedBox(height: 24),
+                  
+                  // Create Listing button
+                  SizedBox(
+                    width: double.infinity,
+                    child: ElevatedButton(
+                      onPressed: isLoading
+                          ? null
+                          : () async {
+                              if (!formKey.currentState!.validate()) return;
+                              
+                              setModalState(() => isLoading = true);
+                              
+                              try {
+                                await _createListing(
+                                  holding: holding,
+                                  shares: int.parse(sharesController.text),
+                                  pricePerShare: double.parse(priceController.text),
+                                );
+                                if (mounted) Navigator.pop(context);
+                              } catch (e) {
+                                if (mounted) {
     ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(
-        content: Text('Sell shares functionality coming soon!'),
+                                    SnackBar(
+                                      content: Text('Error: $e'),
+                                      backgroundColor: Colors.red,
+                                    ),
+                                  );
+                                }
+                              } finally {
+                                setModalState(() => isLoading = false);
+                              }
+                            },
+                      style: ElevatedButton.styleFrom(
+                        padding: const EdgeInsets.all(16),
+                        backgroundColor: Colors.green,
+                      ),
+                      child: isLoading
+                          ? const SizedBox(
+                              height: 20,
+                              width: 20,
+                              child: CircularProgressIndicator(
+                                strokeWidth: 2,
+                                color: Colors.white,
+                              ),
+                            )
+                          : const Text(
+                              'Create Listing',
+                              style: TextStyle(fontSize: 16, color: Colors.white),
+                            ),
+                    ),
+                  ),
+                  const SizedBox(height: 12),
+                  
+                  // Cancel button
+                  SizedBox(
+                    width: double.infinity,
+                    child: TextButton(
+                      onPressed: () => Navigator.pop(context),
+                      child: const Text('Cancel'),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ),
       ),
     );
+  }
+
+  Future<void> _createListing({
+    required UserNftHolding holding,
+    required int shares,
+    required double pricePerShare,
+  }) async {
+    final apiService = ApiService();
+    final walletService = ref.read(walletServiceProvider);
+    
+    // Step 1: First need to approve SmartRentHub to transfer tokens
+    // For now, we'll skip approval check and assume user has approved
+    // TODO: Add approval check and approval flow
+    
+    // Step 2: Prepare listing transaction
+    final prepareResult = await apiService.prepareCreateListing(
+      tokenId: holding.tokenId,
+      sharesForSale: shares,
+      pricePerSharePol: pricePerShare,
+    );
+    
+    if (prepareResult['success'] != true) {
+      throw Exception(prepareResult['error'] ?? 'Failed to prepare listing');
+    }
+    
+    final contractAddress = prepareResult['contract_address'] as String;
+    final functionData = prepareResult['function_data'] as String;
+    
+    // Step 3: Send transaction via WalletConnect
+    final txHash = await walletService.sendTransaction(
+      to: contractAddress,
+      value: EtherAmount.zero(),
+      data: functionData.startsWith('0x') ? functionData : '0x$functionData',
+      gas: 200000,
+    );
+    
+    // Step 4: Show success
+    if (mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Listing created! TX: ${txHash.substring(0, 10)}...'),
+          backgroundColor: Colors.green,
+          duration: const Duration(seconds: 5),
+        ),
+      );
+      
+      // Refresh holdings
+      _loadHoldings();
+    }
   }
 
   void _viewOnOpenSea(int tokenId) {

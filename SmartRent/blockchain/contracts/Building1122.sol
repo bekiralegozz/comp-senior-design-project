@@ -1,11 +1,12 @@
 // SPDX-License-Identifier: MIT
-pragma solidity ^0.8.19;
+pragma solidity ^0.8.20;
 
 import "@openzeppelin/contracts/token/ERC1155/ERC1155.sol";
 import "@openzeppelin/contracts/access/Ownable.sol";
 import "@openzeppelin/contracts/utils/Pausable.sol";
 import "@openzeppelin/contracts/interfaces/IERC2981.sol";
 import "@openzeppelin/contracts/utils/Strings.sol";
+import "./interfaces/ISmartRentHub.sol";
 
 /**
  * @title Building1122
@@ -15,6 +16,10 @@ import "@openzeppelin/contracts/utils/Strings.sol";
  * - Each real estate asset is represented by a unique tokenId
  * - Each asset has a fixed totalSupply (e.g., 1000 units)
  * - Fractional ownership = balanceOf(investor, tokenId) / totalSupply(tokenId)
+ * 
+ * SmartRentHub Integration:
+ * - On mint: Calls SmartRentHub.registerAsset() to register the new asset
+ * - On transfer: Calls SmartRentHub.updateOwnership() to track ownership changes
  * 
  * Example:
  * - tokenId = 1 represents "Apartment 101"
@@ -26,6 +31,9 @@ import "@openzeppelin/contracts/utils/Strings.sol";
 contract Building1122 is ERC1155, Ownable, Pausable, IERC2981 {
     
     using Strings for uint256;
+    
+    // SmartRentHub contract address for registry notifications
+    address public smartRentHub;
     
     // Royalty info
     address public royaltyReceiver;
@@ -50,6 +58,10 @@ contract Building1122 is ERC1155, Ownable, Pausable, IERC2981 {
     
     event TotalSupplySet(uint256 indexed tokenId, uint256 totalSupply);
     
+    event SmartRentHubUpdated(address indexed oldHub, address indexed newHub);
+    
+    event HubNotificationFailed(uint256 indexed tokenId, string reason);
+    
     /**
      * @dev Constructor
      * @param uri_ Base URI for token metadata (can be empty string if not using URI)
@@ -57,6 +69,16 @@ contract Building1122 is ERC1155, Ownable, Pausable, IERC2981 {
      */
     constructor(string memory uri_, address initialOwner) ERC1155(uri_) Ownable(initialOwner) {
         royaltyReceiver = initialOwner;
+    }
+    
+    /**
+     * @dev Set SmartRentHub contract address
+     * @param _smartRentHub Address of SmartRentHub contract
+     */
+    function setSmartRentHub(address _smartRentHub) external onlyOwner {
+        address oldHub = smartRentHub;
+        smartRentHub = _smartRentHub;
+        emit SmartRentHubUpdated(oldHub, _smartRentHub);
     }
     
     /**
@@ -73,6 +95,7 @@ contract Building1122 is ERC1155, Ownable, Pausable, IERC2981 {
      * 
      * This function creates a new asset and sets its total supply.
      * After this, shares can be transferred between investors.
+     * Also notifies SmartRentHub to register the asset.
      */
     function mintInitialSupply(
         uint256 tokenId,
@@ -100,6 +123,22 @@ contract Building1122 is ERC1155, Ownable, Pausable, IERC2981 {
         
         emit AssetInitialized(tokenId, initialOwner, amount, metadataURI);
         emit TotalSupplySet(tokenId, amount);
+        
+        // Notify SmartRentHub about the new asset (with try/catch for safety)
+        if (smartRentHub != address(0)) {
+            try ISmartRentHub(smartRentHub).registerAsset(
+                tokenId,
+                initialOwner,
+                amount,
+                metadataURI
+            ) {
+                // Success - asset registered in hub
+            } catch Error(string memory reason) {
+                emit HubNotificationFailed(tokenId, reason);
+            } catch {
+                emit HubNotificationFailed(tokenId, "Unknown error");
+            }
+        }
     }
     
     /**
@@ -133,7 +172,8 @@ contract Building1122 is ERC1155, Ownable, Pausable, IERC2981 {
     }
     
     /**
-     * @dev Override _update to add pause functionality
+     * @dev Override _update to add pause functionality and SmartRentHub notifications
+     * This is called on every transfer (including mint and burn)
      */
     function _update(
         address from,
@@ -141,7 +181,26 @@ contract Building1122 is ERC1155, Ownable, Pausable, IERC2981 {
         uint256[] memory ids,
         uint256[] memory values
     ) internal override whenNotPaused {
+        // First, execute the actual transfer
         super._update(from, to, ids, values);
+        
+        // Then notify SmartRentHub about ownership changes (with try/catch for safety)
+        // Skip notification on mint (from == address(0)) as registerAsset handles it
+        if (smartRentHub != address(0) && from != address(0)) {
+            for (uint256 i = 0; i < ids.length; i++) {
+                try ISmartRentHub(smartRentHub).updateOwnership(
+                    ids[i],
+                    from,
+                    to,
+                    values[i]
+                ) {
+                    // Success - ownership updated in hub
+                } catch {
+                    // Silently fail - transfer still succeeds
+                    // This ensures transfers work even if hub has issues
+                }
+            }
+        }
     }
     
     /**
@@ -226,4 +285,3 @@ contract Building1122 is ERC1155, Ownable, Pausable, IERC2981 {
         return interfaceId == type(IERC2981).interfaceId || super.supportsInterface(interfaceId);
     }
 }
-

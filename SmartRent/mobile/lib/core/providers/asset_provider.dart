@@ -235,3 +235,142 @@ final allAssetsProvider = StateNotifierProvider<AssetListNotifier, AssetListStat
 final assetCategoriesProvider = Provider<List<String>>((ref) {
   return ['housing', 'vehicles', 'electronics', 'tools', 'furniture', 'sports', 'books', 'clothing', 'other'];
 });
+
+// ============================================
+// MARKETPLACE LISTINGS (SmartRentHub)
+// ============================================
+
+/// Listing model from SmartRentHub
+class MarketplaceListing {
+  final int listingId;
+  final int tokenId;
+  final String seller;
+  final int sharesForSale;
+  final int sharesRemaining;
+  final double pricePerSharePol;
+  final bool isActive;
+  final int createdAt;
+  final String assetName;
+  final String assetImage;
+  final int totalShares;
+
+  MarketplaceListing({
+    required this.listingId,
+    required this.tokenId,
+    required this.seller,
+    required this.sharesForSale,
+    required this.sharesRemaining,
+    required this.pricePerSharePol,
+    required this.isActive,
+    required this.createdAt,
+    required this.assetName,
+    required this.assetImage,
+    required this.totalShares,
+  });
+
+  factory MarketplaceListing.fromJson(Map<String, dynamic> json) {
+    return MarketplaceListing(
+      listingId: json['listing_id'] ?? 0,
+      tokenId: json['token_id'] ?? 0,
+      seller: json['seller'] ?? '',
+      sharesForSale: json['shares_for_sale'] ?? 0,
+      sharesRemaining: json['shares_remaining'] ?? 0,
+      pricePerSharePol: (json['price_per_share_pol'] ?? 0).toDouble(),
+      isActive: json['is_active'] ?? false,
+      createdAt: json['created_at'] ?? 0,
+      assetName: json['asset_name'] ?? 'Asset #${json['token_id']}',
+      assetImage: json['asset_image'] ?? '',
+      totalShares: json['total_shares'] ?? 1000,
+    );
+  }
+
+  double get totalPrice => sharesRemaining * pricePerSharePol;
+  double get percentageForSale => (sharesRemaining / totalShares) * 100;
+}
+
+/// Listings State
+class ListingsState {
+  final List<MarketplaceListing> listings;
+  final bool isLoading;
+  final String? error;
+
+  const ListingsState({
+    this.listings = const [],
+    this.isLoading = false,
+    this.error,
+  });
+
+  ListingsState copyWith({
+    List<MarketplaceListing>? listings,
+    bool? isLoading,
+    String? error,
+  }) {
+    return ListingsState(
+      listings: listings ?? this.listings,
+      isLoading: isLoading ?? this.isLoading,
+      error: error,
+    );
+  }
+}
+
+/// Listings Notifier
+class ListingsNotifier extends StateNotifier<ListingsState> {
+  final ApiService _apiService;
+
+  ListingsNotifier(this._apiService) : super(const ListingsState()) {
+    loadListings();
+  }
+
+  Future<void> loadListings() async {
+    if (state.isLoading) return;
+
+    state = state.copyWith(isLoading: true, error: null);
+
+    try {
+      final response = await _apiService.getListings();
+      final listingsData = response['listings'] as List<dynamic>;
+
+      final listings = listingsData
+          .map((data) => MarketplaceListing.fromJson(data as Map<String, dynamic>))
+          .where((listing) => listing.isActive)
+          .toList();
+
+      state = state.copyWith(
+        listings: listings,
+        isLoading: false,
+      );
+    } catch (e) {
+      state = state.copyWith(
+        isLoading: false,
+        error: 'Failed to load listings: $e',
+      );
+    }
+  }
+
+  Future<void> refresh() => loadListings();
+}
+
+/// Listings Provider - Active marketplace listings from SmartRentHub
+final listingsProvider = StateNotifierProvider<ListingsNotifier, ListingsState>((ref) {
+  final apiService = ApiService();
+  return ListingsNotifier(apiService);
+});
+
+/// My Listings Provider - Listings by connected wallet
+final myListingsProvider = FutureProvider<List<MarketplaceListing>>((ref) async {
+  final walletAddress = ref.watch(walletAddressProvider);
+  if (walletAddress == null) return [];
+
+  final apiService = ApiService();
+  await apiService.initialize();
+  
+  try {
+    final response = await apiService.getMyListings(walletAddress);
+    final listingsData = response['listings'] as List<dynamic>;
+    return listingsData
+        .map((data) => MarketplaceListing.fromJson(data as Map<String, dynamic>))
+        .toList();
+  } catch (e) {
+    return [];
+  }
+});

@@ -1,13 +1,16 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
+import 'package:web3dart/web3dart.dart';
 
 import '../constants/config.dart';
 import '../services/models.dart';
+import '../services/api_service.dart';
+import '../services/wallet_service.dart';
 import '../components/asset_card.dart';
 import '../components/wallet_info_widget.dart';
 import '../core/providers/auth_provider.dart';
-import '../core/providers/asset_provider.dart';
+import '../core/providers/asset_provider.dart'; // Includes listingsProvider, MarketplaceListing
 import '../core/providers/wallet_provider.dart';
 
 /// ==========================================================
@@ -701,7 +704,53 @@ class _HomeScreenState extends ConsumerState<HomeScreen> with SingleTickerProvid
   }
 
   Widget _buildMarketplaceTab(ThemeData theme) {
-    // Marketplace - Coming Soon (will show active Seaport listings)
+    final listingsState = ref.watch(listingsProvider);
+
+    return RefreshIndicator(
+      onRefresh: () async {
+        ref.invalidate(listingsProvider);
+      },
+      child: listingsState.isLoading
+          ? const Center(child: CircularProgressIndicator())
+          : listingsState.error != null
+              ? _buildMarketplaceError(theme, listingsState.error!)
+              : listingsState.listings.isEmpty
+                  ? _buildEmptyMarketplace(theme)
+                  : _buildListingsGrid(theme, listingsState.listings),
+    );
+  }
+
+  Widget _buildMarketplaceError(ThemeData theme, String error) {
+    return Center(
+      child: Padding(
+        padding: const EdgeInsets.all(AppSpacing.xl),
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Icon(Icons.error_outline, size: 64, color: AppColors.error),
+            const SizedBox(height: AppSpacing.md),
+            Text(
+              'Failed to load marketplace',
+              style: theme.textTheme.titleMedium,
+            ),
+            const SizedBox(height: AppSpacing.sm),
+            Text(
+              error,
+              style: theme.textTheme.bodySmall?.copyWith(color: AppColors.grey),
+              textAlign: TextAlign.center,
+            ),
+            const SizedBox(height: AppSpacing.lg),
+            ElevatedButton(
+              onPressed: () => ref.invalidate(listingsProvider),
+              child: const Text('Retry'),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildEmptyMarketplace(ThemeData theme) {
     return Center(
       child: Padding(
         padding: const EdgeInsets.all(AppSpacing.xl),
@@ -715,46 +764,175 @@ class _HomeScreenState extends ConsumerState<HomeScreen> with SingleTickerProvid
             ),
             const SizedBox(height: AppSpacing.lg),
             Text(
-              'Marketplace',
+              'No Active Listings',
               style: theme.textTheme.headlineSmall?.copyWith(
                 fontWeight: FontWeight.bold,
               ),
             ),
             const SizedBox(height: AppSpacing.sm),
             Text(
-              'Coming Soon!',
-              style: theme.textTheme.titleLarge?.copyWith(
-                color: AppColors.primary,
-                fontWeight: FontWeight.w600,
-              ),
-            ),
-            const SizedBox(height: AppSpacing.md),
-            Text(
-              'List and trade your fractional real estate NFTs.\n'
-              'Buy and sell shares with other investors.',
+              'Be the first to list your fractional NFT shares!',
               style: theme.textTheme.bodyMedium?.copyWith(
                 color: AppColors.grey,
               ),
               textAlign: TextAlign.center,
             ),
             const SizedBox(height: AppSpacing.xl),
-            Container(
-              padding: const EdgeInsets.all(AppSpacing.md),
-              decoration: BoxDecoration(
-                color: AppColors.primary.withOpacity(0.1),
-                borderRadius: BorderRadius.circular(12),
-              ),
-              child: Row(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  Icon(Icons.info_outline, color: AppColors.primary, size: 20),
-                  const SizedBox(width: AppSpacing.sm),
-                  Text(
-                    'Powered by Seaport Protocol',
-                    style: theme.textTheme.bodySmall?.copyWith(
-                      color: AppColors.primary,
-                      fontWeight: FontWeight.w500,
+            ElevatedButton.icon(
+              onPressed: () {
+                final walletAddress = ref.read(walletAddressProvider);
+                context.go('/nft-portfolio?wallet=${walletAddress ?? ''}');
+              },
+              icon: const Icon(Icons.sell),
+              label: const Text('Sell My Shares'),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildListingsGrid(ThemeData theme, List<MarketplaceListing> listings) {
+    return ListView.builder(
+      padding: const EdgeInsets.all(AppSpacing.md),
+      itemCount: listings.length,
+      itemBuilder: (context, index) {
+        final listing = listings[index];
+        return _buildListingCard(theme, listing);
+      },
+    );
+  }
+
+  Widget _buildListingCard(ThemeData theme, MarketplaceListing listing) {
+    return Card(
+      margin: const EdgeInsets.only(bottom: AppSpacing.md),
+      child: InkWell(
+        onTap: () {
+          // TODO: Navigate to listing detail
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(content: Text('Listing #${listing.listingId} - Coming soon!')),
+          );
+        },
+        borderRadius: BorderRadius.circular(AppRadius.md),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            // Image
+            ClipRRect(
+              borderRadius: const BorderRadius.vertical(top: Radius.circular(AppRadius.md)),
+              child: listing.assetImage.isNotEmpty
+                  ? Image.network(
+                      listing.assetImage,
+                      height: 150,
+                      width: double.infinity,
+                      fit: BoxFit.cover,
+                      errorBuilder: (_, __, ___) => Container(
+                        height: 150,
+                        color: AppColors.lightGrey,
+                        child: const Icon(Icons.home, size: 48, color: AppColors.grey),
+                      ),
+                    )
+                  : Container(
+                      height: 150,
+                      color: AppColors.lightGrey,
+                      child: const Center(
+                        child: Icon(Icons.home, size: 48, color: AppColors.grey),
+                      ),
                     ),
+            ),
+            Padding(
+              padding: const EdgeInsets.all(AppSpacing.md),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  // Title and Token ID
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      Expanded(
+                        child: Text(
+                          listing.assetName,
+                          style: theme.textTheme.titleMedium?.copyWith(
+                            fontWeight: FontWeight.bold,
+                          ),
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                      ),
+                      Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                        decoration: BoxDecoration(
+                          color: AppColors.primary.withOpacity(0.1),
+                          borderRadius: BorderRadius.circular(4),
+                        ),
+                        child: Text(
+                          '#${listing.tokenId}',
+                          style: theme.textTheme.bodySmall?.copyWith(
+                            color: AppColors.primary,
+                            fontWeight: FontWeight.bold,
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: AppSpacing.sm),
+                  
+                  // Shares info
+                  Row(
+                    children: [
+                      Icon(Icons.pie_chart_outline, size: 16, color: AppColors.grey),
+                      const SizedBox(width: 4),
+                      Text(
+                        '${listing.sharesRemaining} / ${listing.totalShares} shares',
+                        style: theme.textTheme.bodySmall?.copyWith(color: AppColors.grey),
+                      ),
+                      const SizedBox(width: 8),
+                      Text(
+                        '(${listing.percentageForSale.toStringAsFixed(1)}%)',
+                        style: theme.textTheme.bodySmall?.copyWith(
+                          color: AppColors.primary,
+                          fontWeight: FontWeight.w500,
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: AppSpacing.md),
+                  
+                  // Price
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            'Price per share',
+                            style: theme.textTheme.bodySmall?.copyWith(color: AppColors.grey),
+                          ),
+                          Text(
+                            '${listing.pricePerSharePol.toStringAsFixed(4)} POL',
+                            style: theme.textTheme.titleMedium?.copyWith(
+                              fontWeight: FontWeight.bold,
+                              color: AppColors.primary,
+                            ),
+                          ),
+                        ],
+                      ),
+                      ElevatedButton(
+                        onPressed: () => _showBuyDialog(listing),
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: AppColors.success,
+                        ),
+                        child: const Text('Buy'),
+                      ),
+                    ],
+                  ),
+                  
+                  // Seller
+                  const SizedBox(height: AppSpacing.sm),
+                  Text(
+                    'Seller: ${listing.seller.substring(0, 6)}...${listing.seller.substring(listing.seller.length - 4)}',
+                    style: theme.textTheme.bodySmall?.copyWith(color: AppColors.grey),
                   ),
                 ],
               ),
@@ -763,6 +941,256 @@ class _HomeScreenState extends ConsumerState<HomeScreen> with SingleTickerProvid
         ),
       ),
     );
+  }
+
+  void _showBuyDialog(MarketplaceListing listing) {
+    final sharesController = TextEditingController(text: '1');
+    final formKey = GlobalKey<FormState>();
+    bool isLoading = false;
+    int sharesToBuy = 1;
+
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      builder: (context) => StatefulBuilder(
+        builder: (context, setModalState) {
+          final totalCost = sharesToBuy * listing.pricePerSharePol;
+          
+          return Container(
+            padding: EdgeInsets.only(
+              bottom: MediaQuery.of(context).viewInsets.bottom,
+            ),
+            decoration: const BoxDecoration(
+              color: Colors.white,
+              borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+            ),
+            child: Padding(
+              padding: const EdgeInsets.all(24),
+              child: Form(
+                key: formKey,
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    // Handle bar
+                    Center(
+                      child: Container(
+                        width: 40,
+                        height: 4,
+                        margin: const EdgeInsets.only(bottom: 20),
+                        decoration: BoxDecoration(
+                          color: Colors.grey[300],
+                          borderRadius: BorderRadius.circular(2),
+                        ),
+                      ),
+                    ),
+                    
+                    // Title
+                    Text(
+                      'Buy ${listing.assetName}',
+                      style: const TextStyle(
+                        fontSize: 20,
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
+                    const SizedBox(height: 8),
+                    Text(
+                      'Available: ${listing.sharesRemaining} shares @ ${listing.pricePerSharePol.toStringAsFixed(4)} POL each',
+                      style: TextStyle(color: Colors.grey[600]),
+                    ),
+                    const SizedBox(height: 24),
+                    
+                    // Shares input
+                    TextFormField(
+                      controller: sharesController,
+                      keyboardType: TextInputType.number,
+                      decoration: InputDecoration(
+                        labelText: 'Shares to buy',
+                        hintText: 'Max: ${listing.sharesRemaining}',
+                        border: const OutlineInputBorder(),
+                        suffixText: 'shares',
+                      ),
+                      onChanged: (value) {
+                        setModalState(() {
+                          sharesToBuy = int.tryParse(value) ?? 0;
+                        });
+                      },
+                      validator: (value) {
+                        if (value == null || value.isEmpty) {
+                          return 'Enter number of shares';
+                        }
+                        final shares = int.tryParse(value);
+                        if (shares == null || shares <= 0) {
+                          return 'Enter a valid number';
+                        }
+                        if (shares > listing.sharesRemaining) {
+                          return 'Max ${listing.sharesRemaining} shares';
+                        }
+                        return null;
+                      },
+                    ),
+                    const SizedBox(height: 24),
+                    
+                    // Summary
+                    Container(
+                      padding: const EdgeInsets.all(16),
+                      decoration: BoxDecoration(
+                        color: Colors.green.shade50,
+                        borderRadius: BorderRadius.circular(12),
+                        border: Border.all(color: Colors.green.shade200),
+                      ),
+                      child: Column(
+                        children: [
+                          Row(
+                            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                            children: [
+                              const Text('Price per share:'),
+                              Text('${listing.pricePerSharePol.toStringAsFixed(4)} POL'),
+                            ],
+                          ),
+                          const SizedBox(height: 8),
+                          Row(
+                            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                            children: [
+                              const Text('Shares to buy:'),
+                              Text('$sharesToBuy'),
+                            ],
+                          ),
+                          const Divider(height: 24),
+                          Row(
+                            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                            children: [
+                              const Text(
+                                'Total Cost:',
+                                style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
+                              ),
+                              Text(
+                                '${totalCost.toStringAsFixed(4)} POL',
+                                style: const TextStyle(
+                                  fontWeight: FontWeight.bold,
+                                  fontSize: 18,
+                                  color: Colors.green,
+                                ),
+                              ),
+                            ],
+                          ),
+                        ],
+                      ),
+                    ),
+                    const SizedBox(height: 24),
+                    
+                    // Buy button
+                    SizedBox(
+                      width: double.infinity,
+                      child: ElevatedButton(
+                        onPressed: isLoading
+                            ? null
+                            : () async {
+                                if (!formKey.currentState!.validate()) return;
+                                
+                                setModalState(() => isLoading = true);
+                                
+                                try {
+                                  await _executeBuy(
+                                    listing: listing,
+                                    sharesToBuy: sharesToBuy,
+                                  );
+                                  if (mounted) Navigator.pop(context);
+                                } catch (e) {
+                                  if (mounted) {
+                                    ScaffoldMessenger.of(context).showSnackBar(
+                                      SnackBar(
+                                        content: Text('Error: $e'),
+                                        backgroundColor: Colors.red,
+                                      ),
+                                    );
+                                  }
+                                } finally {
+                                  setModalState(() => isLoading = false);
+                                }
+                              },
+                        style: ElevatedButton.styleFrom(
+                          padding: const EdgeInsets.all(16),
+                          backgroundColor: Colors.green,
+                        ),
+                        child: isLoading
+                            ? const SizedBox(
+                                height: 20,
+                                width: 20,
+                                child: CircularProgressIndicator(
+                                  strokeWidth: 2,
+                                  color: Colors.white,
+                                ),
+                              )
+                            : Text(
+                                'Buy for ${totalCost.toStringAsFixed(4)} POL',
+                                style: const TextStyle(fontSize: 16, color: Colors.white),
+                              ),
+                      ),
+                    ),
+                    const SizedBox(height: 12),
+                    
+                    // Cancel button
+                    SizedBox(
+                      width: double.infinity,
+                      child: TextButton(
+                        onPressed: () => Navigator.pop(context),
+                        child: const Text('Cancel'),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          );
+        },
+      ),
+    );
+  }
+
+  Future<void> _executeBuy({
+    required MarketplaceListing listing,
+    required int sharesToBuy,
+  }) async {
+    final apiService = ApiService();
+    final walletService = ref.read(walletServiceProvider);
+    
+    // Step 1: Prepare buy transaction
+    final prepareResult = await apiService.prepareBuyListing(
+      listingId: listing.listingId,
+      sharesToBuy: sharesToBuy,
+    );
+    
+    if (prepareResult['success'] != true) {
+      throw Exception(prepareResult['error'] ?? 'Failed to prepare buy transaction');
+    }
+    
+    final contractAddress = prepareResult['contract_address'] as String;
+    final functionData = prepareResult['function_data'] as String;
+    final valueWei = BigInt.parse(prepareResult['value_wei'] as String);
+    
+    // Step 2: Send transaction via WalletConnect (with POL value)
+    final txHash = await walletService.sendTransaction(
+      to: contractAddress,
+      value: EtherAmount.inWei(valueWei),
+      data: functionData.startsWith('0x') ? functionData : '0x$functionData',
+      gas: 300000,
+    );
+    
+    // Step 3: Show success
+    if (mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Purchase successful! TX: ${txHash.substring(0, 10)}...'),
+          backgroundColor: Colors.green,
+          duration: const Duration(seconds: 5),
+        ),
+      );
+      
+      // Refresh listings
+      ref.invalidate(listingsProvider);
+    }
   }
 
   // Old _buildAllAssetsTab kept for reference but not used
