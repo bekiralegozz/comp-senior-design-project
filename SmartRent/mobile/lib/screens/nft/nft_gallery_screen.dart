@@ -1,18 +1,25 @@
 import 'package:flutter/material.dart';
-import 'package:provider/provider.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../services/nft_service.dart';
 import '../../services/nft_models.dart';
-import '../../providers/wallet_provider.dart';
+import '../../core/providers/wallet_provider.dart' as wallet;
 import 'nft_detail_screen.dart';
 
-class NftGalleryScreen extends StatefulWidget {
+/// ==========================================================
+/// NFT GALLERY SCREEN - BLOCKCHAIN MIGRATION VERSION
+/// ==========================================================
+///
+/// Displays NFT assets from the blockchain.
+/// Uses Riverpod providers for wallet state.
+
+class NftGalleryScreen extends ConsumerStatefulWidget {
   const NftGalleryScreen({Key? key}) : super(key: key);
 
   @override
-  State<NftGalleryScreen> createState() => _NftGalleryScreenState();
+  ConsumerState<NftGalleryScreen> createState() => _NftGalleryScreenState();
 }
 
-class _NftGalleryScreenState extends State<NftGalleryScreen> {
+class _NftGalleryScreenState extends ConsumerState<NftGalleryScreen> {
   final NftService _nftService = NftService();
   List<NftAsset> _assets = [];
   bool _isLoading = true;
@@ -252,14 +259,14 @@ class _NftGalleryScreenState extends State<NftGalleryScreen> {
   }
 
   void _navigateToDetail(NftAsset asset) {
-    final walletProvider = Provider.of<WalletProvider>(context, listen: false);
+    final walletState = ref.read(wallet.walletProvider);
     
     Navigator.push(
       context,
       MaterialPageRoute(
         builder: (context) => NftDetailScreen(
           asset: asset,
-          walletAddress: walletProvider.walletAddress,
+          walletAddress: walletState.address,
         ),
       ),
     );

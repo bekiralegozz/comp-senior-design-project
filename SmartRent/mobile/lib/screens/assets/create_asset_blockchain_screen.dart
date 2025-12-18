@@ -92,8 +92,8 @@ class _CreateAssetBlockchainScreenState
     }
 
     final authState = ref.read(authStateProvider);
-    if (authState.profile == null) {
-      _showError('You must be logged in');
+    if (!authState.isAuthenticated || authState.walletAddress == null) {
+      _showError('Please connect your wallet first');
       return;
     }
 

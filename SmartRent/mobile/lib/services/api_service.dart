@@ -4,17 +4,18 @@ import 'package:flutter/foundation.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import '../constants/config.dart';
-import 'models.dart';
 
 /// API Service for communicating with SmartRent backend
+/// 
+/// MIGRATION NOTE: This service is being refactored for blockchain-first architecture.
+/// Database-dependent endpoints have been removed. Only blockchain and SIWE auth remain.
 class ApiService {
   static final ApiService _instance = ApiService._internal();
   factory ApiService() => _instance;
   ApiService._internal();
 
   Dio? _dio;
-  String? _accessToken;
-  String? _refreshToken;
+  String? _jwtToken; // JWT token from SIWE authentication
   bool _initialized = false;
 
   /// Get the Dio instance, initializing if necessary
@@ -53,238 +54,220 @@ class ApiService {
       ));
     }
 
-    // Load stored auth token
-    await _loadAuthToken();
+    // Load stored JWT token
+    await _loadJwtToken();
     
     _initialized = true;
   }
 
-  /// Load authentication token from storage
-  Future<void> _loadAuthToken() async {
+  /// Load JWT token from storage
+  Future<void> _loadJwtToken() async {
     final prefs = await SharedPreferences.getInstance();
-    _accessToken = prefs.getString('auth_token');
-    _refreshToken = prefs.getString('refresh_token');
-    if (_accessToken != null && _dio != null) {
-      _dio!.options.headers['Authorization'] = 'Bearer $_accessToken';
+    _jwtToken = prefs.getString('jwt_token');
+    if (_jwtToken != null && _dio != null) {
+      _dio!.options.headers['Authorization'] = 'Bearer $_jwtToken';
     }
   }
 
-  Future<void> _persistSession(AuthSession session) async {
-    _accessToken = session.accessToken;
-    _refreshToken = session.refreshToken;
-    dio.options.headers['Authorization'] = 'Bearer ${session.accessToken}';
+  /// Save JWT token to storage
+  Future<void> _saveJwtToken(String token) async {
+    _jwtToken = token;
+    dio.options.headers['Authorization'] = 'Bearer $token';
 
     final prefs = await SharedPreferences.getInstance();
-    await prefs.setString('auth_token', session.accessToken);
-    await prefs.setString('refresh_token', session.refreshToken);
+    await prefs.setString('jwt_token', token);
   }
 
-  /// Clear stored authentication session
+  /// Clear stored JWT token
   Future<void> clearSession() async {
-    _accessToken = null;
-    _refreshToken = null;
+    _jwtToken = null;
     if (_dio != null) {
       dio.options.headers.remove('Authorization');
     }
     
     final prefs = await SharedPreferences.getInstance();
-    await prefs.remove('auth_token');
-    await prefs.remove('refresh_token');
+    await prefs.remove('jwt_token');
+    await prefs.remove('wallet_address');
   }
 
-  /// Attempt to restore session using stored refresh token
-  Future<AuthSession?> restoreSession() async {
-    if (_refreshToken == null) {
-      final prefs = await SharedPreferences.getInstance();
-      _refreshToken = prefs.getString('refresh_token');
-    }
-    if (_refreshToken == null) {
-      return null;
-    }
+  // ============================================
+  // SIWE AUTHENTICATION ENDPOINTS
+  // ============================================
 
+  /// Get nonce for SIWE authentication
+  Future<Map<String, dynamic>> getNonce(String walletAddress) async {
     try {
-      return await refreshSession();
-    } catch (_) {
-      await clearSession();
-      return null;
+      final response = await dio.get(
+        '/auth/nonce',
+        queryParameters: {'address': walletAddress},
+      );
+      return response.data as Map<String, dynamic>;
+    } catch (e) {
+      throw _handleError(e);
     }
   }
 
-  /// Login with email and password
-  Future<AuthSession> loginWithEmail({
-    required String email,
-    required String password,
+  /// Verify SIWE signature and get JWT token
+  Future<Map<String, dynamic>> verifySignature({
+    required String message,
+    required String signature,
+    required String address,
   }) async {
     try {
-      final response = await dio.post(
-        '/auth/login',
-        data: {
-          'email': email,
-          'password': password,
-        },
-      );
-      final session = AuthSession.fromJson(response.data as Map<String, dynamic>);
-      await _persistSession(session);
-      return session;
-    } catch (e) {
-      throw _handleError(e);
-    }
-  }
-
-  /// Sign up a new user (email/password)
-  Future<SignupResponse> signup({
-    required String email,
-    required String password,
-    String? fullName,
-    String? walletAddress,
-    String? avatarUrl,
-  }) async {
-    try {
-      final response = await dio.post(
-        '/auth/signup',
-        data: {
-          'email': email,
-          'password': password,
-          if (fullName != null && fullName.isNotEmpty) 'full_name': fullName,
-          if (walletAddress != null && walletAddress.isNotEmpty) 'wallet_address': walletAddress,
-          if (avatarUrl != null && avatarUrl.isNotEmpty) 'avatar_url': avatarUrl,
-        },
-      );
-      return SignupResponse.fromJson(response.data as Map<String, dynamic>);
-    } catch (e) {
-      throw _handleError(e);
-    }
-  }
-
-  /// Refresh session using stored refresh token
-  Future<AuthSession> refreshSession({String? refreshToken}) async {
-    final token = refreshToken ?? _refreshToken;
-    if (token == null || token.isEmpty) {
-      throw ApiException(
-        'Refresh token missing',
-        type: ApiExceptionType.unauthorized,
-      );
-    }
-
-    try {
-      final response = await dio.post(
-        '/auth/refresh',
-        data: {'refresh_token': token},
-        options: Options(
-          headers: {
-            'Authorization': null,
-          },
-        ),
-      );
-      final session = AuthSession.fromJson(response.data as Map<String, dynamic>);
-      await _persistSession(session);
-      return session;
-    } catch (e) {
-      throw _handleError(e);
-    }
-  }
-
-  /// Logout and revoke refresh token
-  Future<void> logout({String? refreshToken}) async {
-    try {
-      final response = await dio.post(
-        '/auth/logout',
-        data: {
-          'refresh_token': refreshToken ?? _refreshToken,
-        },
-      );
-      // If we get a response (even with connection error), consider it successful
-      // Flutter web sometimes reports connection errors even when request succeeds
-      if (response.statusCode != null && response.statusCode! >= 200 && response.statusCode! < 300) {
-        // Success - session will be cleared in finally
-        return;
+      // Extract nonce from the SIWE message
+      final nonceMatch = RegExp(r'Nonce: ([a-f0-9]+)', caseSensitive: false).firstMatch(message);
+      if (nonceMatch == null) {
+        throw Exception('Could not extract nonce from message');
       }
-    } catch (e) {
-      // Handle errors gracefully
-      if (e is DioException) {
-        // If we have a response despite the error, it might have succeeded
-        if (e.response != null && e.response!.statusCode != null) {
-          final statusCode = e.response!.statusCode!;
-          // 2xx status codes mean success, even if Dio reports an error
-          if (statusCode >= 200 && statusCode < 300) {
-            // Request actually succeeded, just clear session
-            return;
-          }
-        }
-        
-        // For connection errors in Flutter web, check if it's just a warning
-        if (e.type == DioExceptionType.connectionError) {
-          // In Flutter web, connection errors are often false positives
-          // If we don't have response data, assume it might have worked
-          // Session will be cleared anyway in finally
-          return;
-        }
+      final nonce = nonceMatch.group(1)!;
+      
+      final response = await dio.post(
+        '/auth/verify',
+        data: {
+          'message': message,
+          'signature': signature,
+          'nonce': nonce, // Add nonce field
+        },
+      );
+      
+      final data = response.data as Map<String, dynamic>;
+      
+      // Save JWT token
+      if (data.containsKey('access_token')) {
+        await _saveJwtToken(data['access_token'] as String);
       }
       
-      // For other errors, log but don't fail
-      final error = _handleError(e);
-      // Only throw critical server errors
-      if (error.type == ApiExceptionType.serverError) {
-        throw error;
+      return data;
+    } catch (e) {
+      throw _handleError(e);
+    }
+  }
+
+  /// Get current authenticated user info
+  Future<Map<String, dynamic>> getMe() async {
+    try {
+      final response = await dio.get('/auth/me');
+      return response.data as Map<String, dynamic>;
+    } catch (e) {
+      throw _handleError(e);
+    }
+  }
+
+  /// Logout (client-side JWT removal)
+  Future<void> logout() async {
+    try {
+      await dio.post('/auth/logout');
+    } catch (e) {
+      // Ignore errors, clear session anyway
+      if (kDebugMode) {
+        print('Logout error (non-critical): $e');
       }
-      // For other errors, just continue - session will be cleared
     } finally {
-      // Always clear session, even if backend request had issues
       await clearSession();
     }
   }
 
-  /// Request password reset email
-  Future<void> requestPasswordReset(String email, {String? redirectTo}) async {
-    try {
-      await dio.post(
-        '/auth/password/reset',
-        data: {
-          'email': email,
-          if (redirectTo != null && redirectTo.isNotEmpty)
-            'redirect_to': redirectTo,
-        },
-      );
-    } catch (e) {
-      throw _handleError(e);
-    }
-  }
+  // ============================================
+  // NFT MINT ENDPOINTS
+  // ============================================
 
-  /// Confirm password reset with token
-  Future<void> confirmPasswordReset({
-    required String accessToken,
-    required String newPassword,
+  /// Prepare NFT mint (IPFS upload, transaction data)
+  Future<Map<String, dynamic>> prepareMint({
+    required int tokenId,
+    required String ownerAddress,
+    required int totalShares,
+    required String assetName,
+    required String description,
+    required String imageUrl,
+    String propertyType = 'Apartment',
+    int? bedrooms,
+    String? location,
+    int? squareFeet,
+    String? address,
   }) async {
     try {
-      await dio.post(
-        '/auth/password/reset/confirm',
+      final response = await dio.post(
+        '/nft/prepare-mint',
         data: {
-          'access_token': accessToken,
-          'new_password': newPassword,
+          'token_id': tokenId,
+          'owner_address': ownerAddress,
+          'total_shares': totalShares,
+          'asset_name': assetName,
+          'description': description,
+          'image_url': imageUrl,
+          'property_type': propertyType,
+          if (bedrooms != null) 'bedrooms': bedrooms,
+          if (location != null) 'location': location,
+          if (squareFeet != null) 'square_feet': squareFeet,
+          if (address != null) 'address': address,
         },
       );
+
+      return response.data as Map<String, dynamic>;
     } catch (e) {
-      throw _handleError(e);
+      throw ApiException(
+        'Failed to prepare mint: ${e.toString()}',
+        type: ApiExceptionType.unknown,
+      );
     }
   }
 
-  /// Request a magic link / OTP email
-  Future<void> sendMagicLink(String email, {String? redirectTo}) async {
+  /// Confirm NFT mint after user signs transaction
+  Future<Map<String, dynamic>> confirmMint({
+    required int tokenId,
+    required String transactionHash,
+    required String ownerAddress,
+  }) async {
     try {
-      await dio.post(
-        '/auth/magic-link',
+      final response = await dio.post(
+        '/nft/confirm-mint',
         data: {
-          'email': email,
-          if (redirectTo != null && redirectTo.isNotEmpty)
-            'redirect_to': redirectTo,
+          'token_id': tokenId,
+          'transaction_hash': transactionHash,
+          'owner_address': ownerAddress,
         },
       );
+
+      return response.data as Map<String, dynamic>;
     } catch (e) {
-      throw _handleError(e);
+      throw ApiException(
+        'Failed to confirm mint: ${e.toString()}',
+        type: ApiExceptionType.unknown,
+      );
     }
   }
 
-  // Health Check
+  /// Get NFT assets (optionally filtered by owner)
+  Future<Map<String, dynamic>> getNftAssets({
+    String? ownerAddress,
+    int limit = 20,
+    int offset = 0,
+  }) async {
+    try {
+      final queryParams = {
+        'limit': limit.toString(),
+        'offset': offset.toString(),
+        if (ownerAddress != null) 'owner_address': ownerAddress,
+      };
+
+      final response = await dio.get(
+        '/nft/assets',
+        queryParameters: queryParams,
+      );
+
+      return response.data as Map<String, dynamic>;
+    } catch (e) {
+      throw ApiException(
+        'Failed to get NFT assets: ${e.toString()}',
+        type: ApiExceptionType.unknown,
+      );
+    }
+  }
+
+  // ============================================
+  // HEALTH CHECK
+  // ============================================
+
   Future<Map<String, dynamic>> ping() async {
     try {
       final response = await dio.get('/ping');
@@ -294,228 +277,9 @@ class ApiService {
     }
   }
 
-  // User endpoints
-  Future<List<User>> getUsers({int skip = 0, int limit = 20}) async {
-    try {
-      final response = await dio.get('/users/', queryParameters: {
-        'skip': skip,
-        'limit': limit,
-      });
-      
-      return (response.data as List)
-          .map((json) => User.fromJson(json))
-          .toList();
-    } catch (e) {
-      throw _handleError(e);
-    }
-  }
-
-  Future<User> getUser(int userId) async {
-    try {
-      final response = await dio.get('/users/$userId');
-      return User.fromJson(response.data);
-    } catch (e) {
-      throw _handleError(e);
-    }
-  }
-
-  Future<User> getUserByWallet(String walletAddress) async {
-    try {
-      final response = await dio.get('/users/wallet/$walletAddress');
-      return User.fromJson(response.data);
-    } catch (e) {
-      throw _handleError(e);
-    }
-  }
-
-  Future<User> createUser(CreateUserRequest request) async {
-    try {
-      final response = await dio.post('/users/', data: request.toJson());
-      return User.fromJson(response.data);
-    } catch (e) {
-      throw _handleError(e);
-    }
-  }
-
-  Future<User> updateUser(int userId, Map<String, dynamic> updates) async {
-    try {
-      final response = await dio.put('/users/$userId', data: updates);
-      return User.fromJson(response.data);
-    } catch (e) {
-      throw _handleError(e);
-    }
-  }
-
-  // Asset endpoints
-  Future<List<Asset>> getAssets({
-    int skip = 0,
-    int limit = 20,
-    String? category,
-    bool availableOnly = true,
-  }) async {
-    try {
-      final response = await dio.get('/assets/', queryParameters: {
-        'skip': skip,
-        'limit': limit,
-        if (category != null) 'category': category,
-        'available_only': availableOnly,
-      });
-      
-      return (response.data as List)
-          .map((json) => Asset.fromJson(json))
-          .toList();
-    } catch (e) {
-      throw _handleError(e);
-    }
-  }
-
-  Future<Asset> getAsset(String assetId) async {
-    try {
-      final response = await dio.get('/assets/$assetId');
-      return Asset.fromJson(response.data);
-    } catch (e) {
-      throw _handleError(e);
-    }
-  }
-
-  Future<List<Asset>> getAssetsByOwner(String ownerId) async {
-    try {
-      final response = await dio.get('/assets/owner/$ownerId');
-      return (response.data as List)
-          .map((json) => Asset.fromJson(json))
-          .toList();
-    } catch (e) {
-      throw _handleError(e);
-    }
-  }
-
-  Future<List<String>> getAssetCategories() async {
-    try {
-      final response = await dio.get('/assets/categories/');
-      return List<String>.from(response.data);
-    } catch (e) {
-      throw _handleError(e);
-    }
-  }
-
-  Future<Asset> createAsset({
-    required String name,
-    required String ownerId,
-    required double pricePerDay,
-    String? description,
-    String category = 'other',
-    String currency = 'token',
-    String? location,
-    String? imageUrl,
-    String? iotDeviceId,
-  }) async {
-    try {
-      final response = await dio.post('/assets/', data: {
-        'name': name,
-        'owner_id': ownerId,
-        'price_per_day': pricePerDay,
-        'description': description,
-        'category': category,
-        'currency': currency,
-        'location': location,
-        'image_url': imageUrl,
-        'iot_device_id': iotDeviceId,
-      });
-      return Asset.fromJson(response.data);
-    } catch (e) {
-      throw _handleError(e);
-    }
-  }
-
-  Future<Asset> updateAsset(String assetId, UpdateAssetRequest request) async {
-    try {
-      final response = await dio.put('/assets/$assetId', data: request.toJson());
-      return Asset.fromJson(response.data);
-    } catch (e) {
-      throw _handleError(e);
-    }
-  }
-
-  Future<Asset> toggleAssetAvailability(String assetId) async {
-    try {
-      final response = await dio.post('/assets/$assetId/toggle-availability');
-      return Asset.fromJson(response.data);
-    } catch (e) {
-      throw _handleError(e);
-    }
-  }
-
-  // Rental endpoints
-  Future<List<Rental>> getRentals({
-    int skip = 0,
-    int limit = 20,
-    String? status,
-    int? renterId,
-    int? assetId,
-  }) async {
-    try {
-      final response = await dio.get('/rentals/', queryParameters: {
-        'skip': skip,
-        'limit': limit,
-        if (status != null) 'status_filter': status,
-        if (renterId != null) 'renter_id': renterId,
-        if (assetId != null) 'asset_id': assetId,
-      });
-      
-      return (response.data as List)
-          .map((json) => Rental.fromJson(json))
-          .toList();
-    } catch (e) {
-      throw _handleError(e);
-    }
-  }
-
-  Future<Rental> getRental(String rentalId) async {
-    try {
-      final response = await dio.get('/rentals/$rentalId');
-      return Rental.fromJson(response.data);
-    } catch (e) {
-      throw _handleError(e);
-    }
-  }
-
-  Future<List<Rental>> getRentalsByUser(String userId) async {
-    try {
-      final response = await dio.get('/rentals/user/$userId');
-      return (response.data as List)
-          .map((json) => Rental.fromJson(json))
-          .toList();
-    } catch (e) {
-      throw _handleError(e);
-    }
-  }
-
-  Future<Rental> activateRental(String rentalId) async {
-    try {
-      final response = await dio.post('/rentals/$rentalId/activate');
-      return Rental.fromJson(response.data);
-    } catch (e) {
-      throw _handleError(e);
-    }
-  }
-
-  Future<Rental> completeRental(int rentalId) async {
-    try {
-      final response = await dio.post('/rentals/$rentalId/complete');
-      return Rental.fromJson(response.data);
-    } catch (e) {
-      throw _handleError(e);
-    }
-  }
-
-  Future<Rental> cancelRental(int rentalId) async {
-    try {
-      final response = await dio.post('/rentals/$rentalId/cancel');
-      return Rental.fromJson(response.data);
-    } catch (e) {
-      throw _handleError(e);
-    }
-  }
+  // ============================================
+  // ERROR HANDLING
+  // ============================================
 
   /// Handle API errors
   ApiException _handleError(dynamic error) {
@@ -530,10 +294,7 @@ class ApiService {
           );
         
         case DioExceptionType.connectionError:
-          // Flutter web'de XMLHttpRequest hataları yaygın ama genellikle request başarılı oluyor
-          // Eğer response varsa, başarılı sayılabilir
           if (error.response != null) {
-            // Response varsa, normal badResponse gibi handle et
             final statusCode = error.response?.statusCode;
             final data = error.response?.data;
             
@@ -562,7 +323,6 @@ class ApiService {
               type: _getExceptionType(statusCode),
             );
           }
-          // Response yoksa network error olarak handle et
           return ApiException(
             'Network error occurred',
             type: ApiExceptionType.network,
@@ -574,9 +334,7 @@ class ApiService {
           
           String message = 'An error occurred';
           
-          // Try to extract error message from response
           if (data is Map<String, dynamic>) {
-            // FastAPI returns errors in 'detail' field
             if (data.containsKey('detail')) {
               final detail = data['detail'];
               if (detail is String) {
@@ -677,69 +435,3 @@ class ApiException implements Exception {
   @override
   String toString() => 'ApiException: $message';
 }
-
-// ============================================
-// IoT Devices Methods
-// ============================================
-
-extension IoTDevicesMethods on ApiService {
-  Future<List<IoTDevice>> getIoTDevices() async {
-    try {
-      final response = await dio.get('/iot/devices');
-      return (response.data as List)
-          .map((json) => IoTDevice.fromJson(json))
-          .toList();
-    } catch (e) {
-      throw _handleError(e);
-    }
-  }
-}
-
-// ============================================
-// Rentals Methods
-// ============================================
-
-extension RentalsMethods on ApiService {
-  Future<Map<String, dynamic>> createRental({
-    required String assetId,
-    required String renterId,
-    required DateTime startDate,
-    required DateTime endDate,
-    double? totalPriceUsd,
-    String? paymentTxHash,
-  }) async {
-    try {
-      final response = await dio.post('/rentals/', data: {
-        'asset_id': assetId,
-        'renter_id': renterId,
-        'start_date': startDate.toIso8601String().split('T')[0],  // YYYY-MM-DD
-        'end_date': endDate.toIso8601String().split('T')[0],
-        'total_price_usd': totalPriceUsd,
-        'payment_tx_hash': paymentTxHash,
-      });
-      return response.data as Map<String, dynamic>;
-    } catch (e) {
-      throw _handleError(e);
-    }
-  }
-
-  Future<List<Rental>> getMyRentals(String userId) async {
-    try {
-      final response = await dio.get('/rentals/user/$userId');
-      return (response.data as List)
-          .map((json) => Rental.fromJson(json))
-          .toList();
-    } catch (e) {
-      throw _handleError(e);
-    }
-  }
-}
-
-
-
-
-
-
-
-
-

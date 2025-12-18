@@ -27,9 +27,9 @@ class WalletService {
   Future<void> initialize() async {
     if (_initialized) return;
 
-    // Initialize Web3 client
+    // Initialize Web3 client (Polygon)
     _web3Client = Web3Client(
-      BlockchainConfig.sepoliaRpcUrl,
+      BlockchainConfig.polygonRpcUrl,
       http.Client(),
     );
 

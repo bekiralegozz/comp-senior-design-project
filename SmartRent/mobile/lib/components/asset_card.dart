@@ -65,7 +65,7 @@ class AssetCard extends StatelessWidget {
                     const SizedBox(height: 4),
                     
                     // Location
-                    if (asset.location != null && asset.location!.isNotEmpty)
+                    if (asset.locationString.isNotEmpty && asset.locationString != 'Unknown')
                       _buildLocationSection(theme),
                     
                     // Owner (if enabled)
@@ -305,7 +305,7 @@ class AssetCard extends StatelessWidget {
           const SizedBox(width: AppSpacing.xs),
           Expanded(
             child: Text(
-              asset.location!,
+              asset.locationString,
               style: theme.textTheme.bodySmall?.copyWith(
                 color: AppColors.grey,
               ),

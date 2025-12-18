@@ -202,9 +202,8 @@ final walletProvider = StateNotifierProvider<WalletNotifier, WalletState>((ref) 
   return WalletNotifier(walletService);
 });
 
-final walletAddressProvider = Provider<String?>((ref) {
-  return ref.watch(walletProvider).address;
-});
+// Note: walletAddressProvider is defined in auth_provider.dart
+// Use authStateProvider.walletAddress or walletAddressProvider from auth_provider
 
 final walletBalanceProvider = Provider<String?>((ref) {
   return ref.watch(walletProvider).balance;

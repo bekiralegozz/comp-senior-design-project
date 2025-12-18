@@ -7,6 +7,7 @@ class NftAsset {
   final String description;
   final String imageUrl;
   final String metadataUri;
+  final String? contractAddress;
   final int totalShares;
   final int availableShares;
   final double pricePerShare;
@@ -19,6 +20,7 @@ class NftAsset {
     required this.description,
     required this.imageUrl,
     required this.metadataUri,
+    this.contractAddress,
     required this.totalShares,
     required this.availableShares,
     this.pricePerShare = 0.0,
@@ -33,6 +35,7 @@ class NftAsset {
       description: json['description'] ?? '',
       imageUrl: json['image_url'] ?? json['image'] ?? '',
       metadataUri: json['metadata_uri'] ?? json['metadataUri'] ?? '',
+      contractAddress: json['contract_address'] ?? json['contractAddress'],
       totalShares: json['total_shares'] ?? json['totalShares'] ?? 0,
       availableShares: json['available_shares'] ?? json['availableShares'] ?? 0,
       pricePerShare: (json['price_per_share'] ?? json['pricePerShare'] ?? 0.0).toDouble(),
@@ -48,6 +51,7 @@ class NftAsset {
       'description': description,
       'image_url': imageUrl,
       'metadata_uri': metadataUri,
+      'contract_address': contractAddress,
       'total_shares': totalShares,
       'available_shares': availableShares,
       'price_per_share': pricePerShare,

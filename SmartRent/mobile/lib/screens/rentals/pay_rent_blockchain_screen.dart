@@ -18,9 +18,20 @@ import '../../widgets/wallet_connect_button.dart';
 
 /// Provider for fetching asset details
 final rentAssetProvider = FutureProvider.family<Asset, String>((ref, assetId) async {
-  final apiService = ApiService();
-  await apiService.initialize();
-  return await apiService.getAsset(assetId);
+  // TODO: Fetch asset details from blockchain or NFT service
+  // For now, return a placeholder asset
+  return Asset(
+    id: assetId,
+    title: 'Asset $assetId',
+    imageUrl: null,
+    category: null,
+    pricePerDay: 0.0,
+    currency: 'MATIC',
+    location: null,
+    isAvailable: true,
+    tokenId: null,
+    createdAt: DateTime.now(),
+  );
 });
 
 /// Provider for fetching asset owners from blockchain
@@ -86,16 +97,10 @@ class _PayRentBlockchainScreenState
       return;
     }
 
-    // Check wallet connection
-    final walletState = ref.read(walletProvider);
-    if (!walletState.isConnected || walletState.address == null) {
-      _showError('Please connect your wallet first');
-      return;
-    }
-
+    // Check wallet connection and authentication
     final authState = ref.read(authStateProvider);
-    if (authState.profile == null) {
-      _showError('You must be logged in');
+    if (!authState.isAuthenticated || authState.walletAddress == null) {
+      _showError('Please connect your wallet first');
       return;
     }
 

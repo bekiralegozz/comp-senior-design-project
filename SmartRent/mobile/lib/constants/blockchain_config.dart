@@ -1,24 +1,20 @@
 /// Blockchain Configuration
-/// Sepolia Testnet configuration for SmartRent contracts
+/// Polygon Mainnet configuration for SmartRent contracts
 class BlockchainConfig {
-  // Sepolia RPC URL (Alchemy)
-  static const String sepoliaRpcUrl =
-      'https://eth-sepolia.g.alchemy.com/v2/e7KBw7Uhu7r1meEBJRPyZ';
+  // Polygon RPC URL (Free Public RPC)
+  static const String polygonRpcUrl = 'https://polygon-rpc.com';
 
-  // Sepolia Chain ID
-  static const int chainId = 11155111;
+  // Polygon Chain ID
+  static const int chainId = 137;
 
-  // Contract Addresses (Deployed on Sepolia)
-  static const String building1122Address =
-      '0x56cefb343baf4573af99b9128e498f1e68178816';
-  static const String rentalManagerAddress =
-      '0x57044386a0c5fb623315dd5b8eeea6078bb9193c';
-  static const String marketplaceAddress =
-      '0x2ffcd104d50c99d24d76acfc3ef1dfb550127a1f';
+  // Contract Addresses (TODO: Deploy to Polygon Mainnet)
+  static const String building1122Address = '0x0000000000000000000000000000000000000000';
+  static const String rentalManagerAddress = '0x0000000000000000000000000000000000000000';
+  static const String marketplaceAddress = '0x0000000000000000000000000000000000000000';
 
   // Network Configuration
-  static const String networkName = 'Sepolia Testnet';
-  static const String currencySymbol = 'ETH';
+  static const String networkName = 'Polygon Mainnet';
+  static const String currencySymbol = 'MATIC';
   static const int decimals = 18;
 
   // Gas Configuration

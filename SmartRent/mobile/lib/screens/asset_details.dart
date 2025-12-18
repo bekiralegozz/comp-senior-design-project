@@ -6,14 +6,14 @@ import 'package:cached_network_image/cached_network_image.dart';
 
 import '../constants/config.dart';
 import '../services/models.dart';
-import '../services/api_service.dart';
+import '../core/providers/asset_provider.dart';
 
-/// Provider for asset details
-final assetDetailsProvider = FutureProvider.family<Asset, String>((ref, assetId) async {
-  final apiService = ApiService();
-  await apiService.initialize();
-  return await apiService.getAsset(assetId);
-});
+/// ==========================================================
+/// ASSET DETAILS SCREEN - BLOCKCHAIN MIGRATION VERSION
+/// ==========================================================
+///
+/// Displays asset details from blockchain via NFT service.
+/// Uses assetDetailProvider which fetches from smart contracts.
 
 class AssetDetailsScreen extends ConsumerWidget {
   final String assetId;
@@ -23,36 +23,74 @@ class AssetDetailsScreen extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final theme = Theme.of(context);
-    final assetDetails = ref.watch(assetDetailsProvider(assetId));
-
-    return Scaffold(
-      body: assetDetails.when(
-        data: (asset) => _buildAssetDetails(context, theme, asset),
-        loading: () => const Center(child: CircularProgressIndicator()),
-        error: (error, stack) => Center(
+    
+    // Try to parse assetId as tokenId (int)
+    final tokenId = int.tryParse(assetId);
+    
+    if (tokenId == null) {
+      return Scaffold(
+        appBar: AppBar(title: const Text('Asset Details')),
+        body: Center(
           child: Column(
             mainAxisAlignment: MainAxisAlignment.center,
             children: [
-              Icon(
-                Icons.error_outline,
-                size: 64,
-                color: AppColors.error,
-              ),
+              Icon(Icons.error_outline, size: 64, color: AppColors.error),
               const SizedBox(height: AppSpacing.md),
-              Text('Failed to load asset details'),
-              const SizedBox(height: AppSpacing.sm),
-              ElevatedButton(
-                onPressed: () => ref.invalidate(assetDetailsProvider(assetId)),
-                child: const Text('Retry'),
-              ),
+              Text('Invalid asset ID: $assetId'),
             ],
           ),
         ),
+      );
+    }
+    
+    final assetState = ref.watch(assetDetailProvider(tokenId));
+
+    return Scaffold(
+      body: Builder(
+        builder: (context) {
+          if (assetState.isLoading) {
+            return const Center(child: CircularProgressIndicator());
+          }
+          
+          if (assetState.error != null) {
+            return Center(
+              child: Column(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  Icon(Icons.error_outline, size: 64, color: AppColors.error),
+                  const SizedBox(height: AppSpacing.md),
+                  Text('Failed to load asset details'),
+                  const SizedBox(height: AppSpacing.sm),
+                  Text(assetState.error!, style: TextStyle(color: AppColors.grey)),
+                  const SizedBox(height: AppSpacing.md),
+                  ElevatedButton(
+                    onPressed: () => ref.invalidate(assetDetailProvider(tokenId)),
+                    child: const Text('Retry'),
+                  ),
+                ],
+              ),
+            );
+          }
+          
+          if (assetState.asset != null) {
+            return _buildAssetDetails(context, theme, assetState.asset!);
+          }
+          
+          return Center(
+            child: Column(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                Icon(Icons.inventory_2_outlined, size: 64, color: AppColors.grey),
+                const SizedBox(height: AppSpacing.md),
+                Text('Asset not found on blockchain'),
+              ],
+            ),
+          );
+        },
       ),
-      bottomNavigationBar: assetDetails.maybeWhen(
-        data: (asset) => _BottomRentBar(asset: asset),
-        orElse: () => null,
-      ),
+      bottomNavigationBar: assetState.asset != null
+          ? _BottomRentBar(asset: assetState.asset!)
+          : null,
     );
   }
 
@@ -102,11 +140,7 @@ class AssetDetailsScreen extends ConsumerWidget {
                         ),
                       ),
                       child: const Center(
-                        child: Icon(
-                          Icons.image_not_supported,
-                          size: 80,
-                          color: Colors.white70,
-                        ),
+                        child: Icon(Icons.image_not_supported, size: 80, color: Colors.white70),
                       ),
                     ),
                   )
@@ -124,11 +158,7 @@ class AssetDetailsScreen extends ConsumerWidget {
                       ),
                     ),
                     child: const Center(
-                      child: Icon(
-                        Icons.image,
-                        size: 80,
-                        color: Colors.white,
-                      ),
+                      child: Icon(Icons.image, size: 80, color: Colors.white),
                     ),
                   ),
           ),
@@ -136,7 +166,6 @@ class AssetDetailsScreen extends ConsumerWidget {
             IconButton(
               icon: const Icon(Icons.share),
               onPressed: () {
-                // TODO: Implement sharing
                 ScaffoldMessenger.of(context).showSnackBar(
                   const SnackBar(content: Text('Share feature coming soon!')),
                 );
@@ -145,7 +174,6 @@ class AssetDetailsScreen extends ConsumerWidget {
             IconButton(
               icon: const Icon(Icons.favorite_border),
               onPressed: () {
-                // TODO: Implement favorites
                 ScaffoldMessenger.of(context).showSnackBar(
                   const SnackBar(content: Text('Favorites feature coming soon!')),
                 );
@@ -165,8 +193,10 @@ class AssetDetailsScreen extends ConsumerWidget {
                 _buildTitleSection(theme, asset),
                 const SizedBox(height: AppSpacing.lg),
                 
-                // Owner Info
-                _buildOwnerSection(context, theme, asset),
+                // Blockchain Badge
+                if (asset.isTokenized)
+                  _buildBlockchainBadge(theme, asset),
+                
                 const SizedBox(height: AppSpacing.lg),
                 
                 // Asset Details
@@ -176,10 +206,6 @@ class AssetDetailsScreen extends ConsumerWidget {
                 // Description
                 if (asset.description != null && asset.description!.isNotEmpty)
                   _buildDescriptionSection(theme, asset),
-                
-                // Location
-                if (asset.location != null && asset.location!.isNotEmpty)
-                  _buildLocationSection(theme, asset),
                 
                 // Availability Status
                 _buildAvailabilitySection(theme, asset),
@@ -236,7 +262,7 @@ class AssetDetailsScreen extends ConsumerWidget {
           textBaseline: TextBaseline.alphabetic,
           children: [
             Text(
-              '${asset.pricePerDay} ${asset.currency == "USD" ? "token" : asset.currency}',
+              '${asset.pricePerDay ?? 0} ${asset.currency ?? 'MATIC'}',
               style: theme.textTheme.headlineMedium?.copyWith(
                 color: AppColors.primary,
                 fontWeight: FontWeight.bold,
@@ -255,79 +281,40 @@ class AssetDetailsScreen extends ConsumerWidget {
     );
   }
 
-  Widget _buildOwnerSection(BuildContext context, ThemeData theme, Asset asset) {
+  Widget _buildBlockchainBadge(ThemeData theme, Asset asset) {
     return Container(
       padding: const EdgeInsets.all(AppSpacing.md),
       decoration: BoxDecoration(
-        color: theme.cardColor,
+        color: AppColors.secondary.withOpacity(0.1),
         borderRadius: BorderRadius.circular(AppRadius.md),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withOpacity(0.05),
-            blurRadius: 4,
-            offset: const Offset(0, 2),
-          ),
-        ],
+        border: Border.all(color: AppColors.secondary),
       ),
       child: Row(
         children: [
-          CircleAvatar(
-            radius: 24,
-            backgroundColor: AppColors.primary.withOpacity(0.1),
-            child: Text(
-              (asset.owner?.fullName ?? asset.owner?.username ?? 'U')[0].toUpperCase(),
-              style: theme.textTheme.titleMedium?.copyWith(
-                color: AppColors.primary,
-                fontWeight: FontWeight.bold,
-              ),
-            ),
-          ),
-          const SizedBox(width: AppSpacing.md),
+          Icon(Icons.token, color: AppColors.secondary),
+          const SizedBox(width: AppSpacing.sm),
           Expanded(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Text(
-                  'Owned by',
-                  style: theme.textTheme.bodySmall?.copyWith(
-                    color: AppColors.grey,
+                  'NFT Asset on Polygon',
+                  style: theme.textTheme.titleMedium?.copyWith(
+                    fontWeight: FontWeight.bold,
+                    color: AppColors.secondary,
                   ),
                 ),
                 Text(
-                  asset.owner?.fullName ?? asset.owner?.username ?? 'Anonymous',
-                  style: theme.textTheme.titleMedium?.copyWith(
-                    fontWeight: FontWeight.w600,
+                  'Token ID: #${asset.tokenId}',
+                  style: theme.textTheme.bodySmall?.copyWith(
+                    color: AppColors.grey,
+                    fontFamily: 'monospace',
                   ),
                 ),
-                if (asset.owner?.isVerified == true)
-                  Row(
-                    children: [
-                      Icon(
-                        Icons.verified,
-                        size: 16,
-                        color: AppColors.success,
-                      ),
-                      const SizedBox(width: AppSpacing.xs),
-                      Text(
-                        'Verified Owner',
-                        style: theme.textTheme.bodySmall?.copyWith(
-                          color: AppColors.success,
-                        ),
-                      ),
-                    ],
-                  ),
               ],
             ),
           ),
-          IconButton(
-            icon: const Icon(Icons.message_outlined),
-            onPressed: () {
-              // TODO: Implement messaging
-              ScaffoldMessenger.of(context).showSnackBar(
-                const SnackBar(content: Text('Messaging coming soon!')),
-              );
-            },
-          ),
+          Icon(Icons.verified, color: AppColors.success),
         ],
       ),
     );
@@ -346,11 +333,11 @@ class AssetDetailsScreen extends ConsumerWidget {
         const SizedBox(height: AppSpacing.md),
         _buildDetailRow(theme, 'Asset ID', '#${asset.id}'),
         _buildDetailRow(theme, 'Category', AssetCategories.getDisplayName(asset.category ?? 'other')),
-        _buildDetailRow(theme, 'Currency', (asset.currency ?? 'token') == "USD" ? "token" : (asset.currency ?? 'token')),
+        _buildDetailRow(theme, 'Currency', asset.currency ?? 'MATIC'),
         if (asset.tokenId != null)
           _buildDetailRow(theme, 'NFT Token ID', '#${asset.tokenId}'),
-        if (asset.iotDeviceId != null)
-          _buildDetailRow(theme, 'IoT Device', asset.iotDeviceId!),
+        if (asset.contractAddress != null)
+          _buildDetailRow(theme, 'Contract', '${asset.contractAddress!.substring(0, 10)}...'),
         _buildDetailRow(
           theme, 
           'Listed on', 
@@ -377,10 +364,7 @@ class AssetDetailsScreen extends ConsumerWidget {
             ),
           ),
           Expanded(
-            child: Text(
-              value,
-              style: theme.textTheme.bodyMedium,
-            ),
+            child: Text(value, style: theme.textTheme.bodyMedium),
           ),
         ],
       ),
@@ -398,42 +382,7 @@ class AssetDetailsScreen extends ConsumerWidget {
           ),
         ),
         const SizedBox(height: AppSpacing.md),
-        Text(
-          asset.description!,
-          style: theme.textTheme.bodyMedium,
-        ),
-        const SizedBox(height: AppSpacing.lg),
-      ],
-    );
-  }
-
-  Widget _buildLocationSection(ThemeData theme, Asset asset) {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Text(
-          'Location',
-          style: theme.textTheme.titleLarge?.copyWith(
-            fontWeight: FontWeight.bold,
-          ),
-        ),
-        const SizedBox(height: AppSpacing.md),
-        Row(
-          children: [
-            Icon(
-              Icons.location_on_outlined,
-              color: AppColors.primary,
-              size: 20,
-            ),
-            const SizedBox(width: AppSpacing.xs),
-            Expanded(
-              child: Text(
-                asset.location!,
-                style: theme.textTheme.bodyMedium,
-              ),
-            ),
-          ],
-        ),
+        Text(asset.description!, style: theme.textTheme.bodyMedium),
         const SizedBox(height: AppSpacing.lg),
       ],
     );
@@ -517,14 +466,14 @@ class _BottomRentBar extends StatelessWidget {
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Text(
-                    '${asset.pricePerDay} ${asset.currency == "USD" ? "token" : asset.currency}/day',
+                    '${asset.pricePerDay ?? 0} ${asset.currency ?? 'MATIC'}/day',
                     style: theme.textTheme.titleLarge?.copyWith(
                       fontWeight: FontWeight.bold,
                       color: AppColors.primary,
                     ),
                   ),
                   Text(
-                    'Plus applicable fees',
+                    'Plus gas fees',
                     style: theme.textTheme.bodySmall?.copyWith(
                       color: AppColors.grey,
                     ),
@@ -536,8 +485,11 @@ class _BottomRentBar extends StatelessWidget {
             ElevatedButton(
               onPressed: (asset.isAvailable ?? false)
                   ? () {
-                      // Navigate to rental creation screen with asset data
-                      context.push('/rentals/create/${asset.id}', extra: asset);
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        const SnackBar(
+                          content: Text('Blockchain rental coming soon!'),
+                        ),
+                      );
                     }
                   : null,
               style: ElevatedButton.styleFrom(
@@ -556,12 +508,4 @@ class _BottomRentBar extends StatelessWidget {
     );
   }
 }
-
-
-
-
-
-
-
-
 

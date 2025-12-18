@@ -20,16 +20,23 @@ class NftService {
   // ============================================
 
   /// Get all available NFT assets
-  Future<List<NftAsset>> getAllAssets() async {
+  Future<List<NftAsset>> getAllAssets({String? ownerAddress}) async {
     try {
+      final uri = Uri.parse('$baseUrl/nft/assets').replace(
+        queryParameters: {
+          if (ownerAddress != null) 'owner_address': ownerAddress,
+        },
+      );
+      
       final response = await http.get(
-        Uri.parse('$baseUrl/nft/assets'),
+        uri,
         headers: {'Content-Type': 'application/json'},
       );
 
       if (response.statusCode == 200) {
-        final List<dynamic> data = json.decode(response.body);
-        return data.map((json) => NftAsset.fromJson(json)).toList();
+        final Map<String, dynamic> responseData = json.decode(response.body);
+        final List<dynamic> assetsData = responseData['assets'] ?? [];
+        return assetsData.map((json) => NftAsset.fromJson(json)).toList();
       } else {
         throw Exception('Failed to load assets: ${response.statusCode}');
       }

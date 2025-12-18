@@ -23,6 +23,7 @@ class IPFSService:
     def __init__(self):
         self.api_key = getattr(settings, 'PINATA_API_KEY', None)
         self.secret_key = getattr(settings, 'PINATA_SECRET_KEY', None)
+        self._last_image_url = None  # Track last uploaded image URL
         
         if not self.api_key or not self.secret_key:
             logger.warning("Pinata credentials not configured - IPFS uploads disabled")
@@ -49,6 +50,10 @@ class IPFSService:
         except Exception as e:
             logger.error(f"Pinata auth test failed: {str(e)}")
             return False
+    
+    def get_last_uploaded_image_url(self) -> Optional[str]:
+        """Get the gateway URL of the last uploaded image"""
+        return self._last_image_url
     
     def upload_json_metadata(
         self,
@@ -160,6 +165,7 @@ class IPFSService:
             if response.status_code == 200:
                 ipfs_hash = response.json()["IpfsHash"]
                 ipfs_uri = f"ipfs://{ipfs_hash}"
+                self._last_image_url = f"{self.GATEWAY_URL}/{ipfs_hash}"  # Track gateway URL
                 logger.info(f"Image uploaded to IPFS: {ipfs_uri}")
                 return ipfs_uri
             else:
@@ -228,8 +234,6 @@ class IPFSService:
         total_shares: int = 1000,
         square_feet: int = None,
         address: str = None,
-        rental_yield: str = None,
-        estimated_value: str = None
     ) -> Optional[str]:
         """
         Create and upload complete asset metadata to IPFS
@@ -265,10 +269,6 @@ class IPFSService:
             properties = {}
             if address:
                 properties["address"] = address
-            if rental_yield:
-                properties["rental_yield"] = rental_yield
-            if estimated_value:
-                properties["estimated_value"] = estimated_value
             
             # Upload metadata
             logger.info(f"Uploading metadata for {asset_name}...")

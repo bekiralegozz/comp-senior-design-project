@@ -1,5 +1,10 @@
 """
 Configuration management for SmartRent Backend
+
+MIGRATION NOTE (Dec 2025):
+- Database/Supabase dependencies are being removed
+- Moving to wallet-based authentication (SIWE)
+- Backend will be blockchain-first
 """
 
 import os
@@ -23,11 +28,13 @@ class Settings(BaseSettings):
         env="ALLOWED_ORIGINS"
     )
     
-    # Database
-    DATABASE_URL: str = Field(
-        default="postgresql://smartrent:password@localhost:5432/smartrent_db",
-        env="DATABASE_URL"
-    )
+    # ============================================================
+    # DEPRECATED: Database (no longer used - blockchain is source of truth)
+    # ============================================================
+    # DATABASE_URL: str = Field(
+    #     default="postgresql://smartrent:password@localhost:5432/smartrent_db",
+    #     env="DATABASE_URL"
+    # )
     
     # Blockchain/Web3 - Polygon Mainnet
     WEB3_PROVIDER_URL: str = Field(
@@ -54,31 +61,41 @@ class Settings(BaseSettings):
     
     # OpenSea
     OPENSEA_API_KEY: str = Field(default="", env="OPENSEA_API_KEY")
+
+    # Alchemy (NFT indexing / enhanced RPC)
+    # Used to list NFTs for an owner without relying on local caches or RPC log filters.
+    ALCHEMY_API_KEY: str = Field(default="", env="ALCHEMY_API_KEY")
     
-    # Security
+    # Security (for SIWE JWT tokens)
     SECRET_KEY: str = Field(
         default="your-secret-key-change-this-in-production",
         env="SECRET_KEY"
     )
-    ACCESS_TOKEN_EXPIRE_MINUTES: int = Field(default=30, env="ACCESS_TOKEN_EXPIRE_MINUTES")
+    ACCESS_TOKEN_EXPIRE_MINUTES: int = Field(default=1440, env="ACCESS_TOKEN_EXPIRE_MINUTES")  # 24 hours for wallet auth
     ALGORITHM: str = "HS256"
 
-    # Supabase
-    SUPABASE_URL: str = Field(default="", env="SUPABASE_URL")
-    SUPABASE_ANON_KEY: str = Field(default="", env="SUPABASE_ANON_KEY")
-    SUPABASE_SERVICE_ROLE_KEY: str = Field(default="", env="SUPABASE_SERVICE_ROLE_KEY")
-    SUPABASE_EMAIL_REDIRECT_TO: str = Field(default="", env="SUPABASE_EMAIL_REDIRECT_TO")
-    SUPABASE_JWT_AUDIENCE: str = Field(default="authenticated", env="SUPABASE_JWT_AUDIENCE")
+    # ============================================================
+    # DEPRECATED: Supabase (no longer used - using wallet auth)
+    # ============================================================
+    # SUPABASE_URL: str = Field(default="", env="SUPABASE_URL")
+    # SUPABASE_ANON_KEY: str = Field(default="", env="SUPABASE_ANON_KEY")
+    # SUPABASE_SERVICE_ROLE_KEY: str = Field(default="", env="SUPABASE_SERVICE_ROLE_KEY")
+    # SUPABASE_EMAIL_REDIRECT_TO: str = Field(default="", env="SUPABASE_EMAIL_REDIRECT_TO")
+    # SUPABASE_JWT_AUDIENCE: str = Field(default="authenticated", env="SUPABASE_JWT_AUDIENCE")
 
-    # Auth cookies
-    AUTH_REFRESH_TOKEN_COOKIE_NAME: str = Field(default="sb-refresh-token", env="AUTH_REFRESH_TOKEN_COOKIE_NAME")
-    AUTH_REFRESH_TOKEN_COOKIE_MAX_AGE: int = Field(default=60 * 60 * 24 * 30, env="AUTH_REFRESH_TOKEN_COOKIE_MAX_AGE")  # 30 days
-    AUTH_REFRESH_TOKEN_COOKIE_SECURE: bool = Field(default=True, env="AUTH_REFRESH_TOKEN_COOKIE_SECURE")
-    AUTH_REFRESH_TOKEN_COOKIE_SAMESITE: str = Field(default="lax", env="AUTH_REFRESH_TOKEN_COOKIE_SAMESITE")
-    AUTH_REFRESH_TOKEN_COOKIE_DOMAIN: Optional[str] = Field(default=None, env="AUTH_REFRESH_TOKEN_COOKIE_DOMAIN")
+    # ============================================================
+    # DEPRECATED: Auth cookies (no longer used)
+    # ============================================================
+    # AUTH_REFRESH_TOKEN_COOKIE_NAME: str = Field(default="sb-refresh-token", env="AUTH_REFRESH_TOKEN_COOKIE_NAME")
+    # AUTH_REFRESH_TOKEN_COOKIE_MAX_AGE: int = Field(default=60 * 60 * 24 * 30, env="AUTH_REFRESH_TOKEN_COOKIE_MAX_AGE")
+    # AUTH_REFRESH_TOKEN_COOKIE_SECURE: bool = Field(default=True, env="AUTH_REFRESH_TOKEN_COOKIE_SECURE")
+    # AUTH_REFRESH_TOKEN_COOKIE_SAMESITE: str = Field(default="lax", env="AUTH_REFRESH_TOKEN_COOKIE_SAMESITE")
+    # AUTH_REFRESH_TOKEN_COOKIE_DOMAIN: Optional[str] = Field(default=None, env="AUTH_REFRESH_TOKEN_COOKIE_DOMAIN")
     
-    # Redis (for caching)
-    REDIS_URL: str = Field(default="redis://localhost:6379", env="REDIS_URL")
+    # ============================================================
+    # DEPRECATED: Redis (not needed for wallet-based auth)
+    # ============================================================
+    # REDIS_URL: str = Field(default="redis://localhost:6379", env="REDIS_URL")
     
     # File Storage
     UPLOAD_PATH: str = Field(default="./uploads", env="UPLOAD_PATH")
@@ -87,6 +104,7 @@ class Settings(BaseSettings):
     class Config:
         env_file = ".env"
         case_sensitive = True
+        extra = "ignore"  # Ignore deprecated env vars (SUPABASE_*, DATABASE_URL, etc.)
 
 
 # Global settings instance

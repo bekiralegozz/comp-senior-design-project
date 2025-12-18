@@ -3,23 +3,63 @@ NFT and Blockchain API Routes
 Handles NFT minting, fractional ownership, and marketplace operations
 """
 
-from fastapi import APIRouter, HTTPException, status, Depends
+from fastapi import APIRouter, HTTPException, status
 from pydantic import BaseModel, Field
-from typing import Optional, List
+from typing import Optional, List, Set
 import logging
+import json
+from pathlib import Path
 
 from app.services.web3_service import web3_service
 from app.services.ipfs_service import ipfs_service
-from app.core.security import get_current_user
+from app.services.alchemy_service import alchemy_service
+
+# DEPRECATED: Supabase auth removed, SIWE coming in Faz 2
+# from app.core.security import get_current_user
 
 logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/api/v1/nft", tags=["NFT"])
 
+# Token cache file path
+TOKEN_CACHE_FILE = Path(__file__).parent.parent.parent.parent / "data" / "minted_tokens.json"
+
+# Helper functions for token caching
+def _load_minted_tokens() -> Set[int]:
+    """Load minted token IDs from cache file"""
+    try:
+        if TOKEN_CACHE_FILE.exists():
+            with open(TOKEN_CACHE_FILE, 'r') as f:
+                data = json.load(f)
+                return set(data.get('token_ids', []))
+        return set()
+    except Exception as e:
+        logger.warning(f"Failed to load token cache: {e}")
+        return set()
+
+def _save_minted_token(token_id: int):
+    """Add a token ID to the cache"""
+    try:
+        # Create data directory if it doesn't exist
+        TOKEN_CACHE_FILE.parent.mkdir(parents=True, exist_ok=True)
+        
+        # Load existing tokens
+        tokens = _load_minted_tokens()
+        tokens.add(token_id)
+        
+        # Save updated list
+        with open(TOKEN_CACHE_FILE, 'w') as f:
+            json.dump({'token_ids': sorted(list(tokens))}, f, indent=2)
+        
+        logger.info(f"Added token {token_id} to cache")
+    except Exception as e:
+        logger.error(f"Failed to save token to cache: {e}")
+
 
 # ==================== Request/Response Models ====================
 
-class MintNFTRequest(BaseModel):
+class PrepareMintRequest(BaseModel):
+    """Request to prepare NFT mint (IPFS upload, validation)"""
     token_id: int = Field(..., description="Unique token ID for the asset")
     owner_address: str = Field(..., description="Ethereum address of the owner")
     total_shares: int = Field(default=1000, description="Total fractional shares")
@@ -33,6 +73,40 @@ class MintNFTRequest(BaseModel):
     address: Optional[str] = None
     rental_yield: Optional[str] = None
     estimated_value: Optional[str] = None
+
+
+class PrepareMintResponse(BaseModel):
+    """Response from prepare mint (ready for user to sign)"""
+    success: bool
+    token_id: int
+    metadata_uri: str
+    contract_address: str
+    function_data: str
+    gas_estimate: str
+    ipfs_image_url: str
+    message: str
+
+
+class ConfirmMintRequest(BaseModel):
+    """Request to confirm mint after user signs transaction"""
+    token_id: int = Field(..., description="Token ID that was minted")
+    transaction_hash: str = Field(..., description="Transaction hash from blockchain")
+    owner_address: str = Field(..., description="Owner's wallet address")
+
+
+class MintNFTRequest(BaseModel):
+    """DEPRECATED: Use PrepareMintRequest + ConfirmMintRequest for user-signed transactions"""
+    token_id: int = Field(..., description="Unique token ID for the asset")
+    owner_address: str = Field(..., description="Ethereum address of the owner")
+    total_shares: int = Field(default=1000, description="Total fractional shares")
+    asset_name: str = Field(..., description="Name of the asset")
+    description: str = Field(..., description="Description of the asset")
+    image_url: str = Field(..., description="URL of the asset image")
+    property_type: str = Field(default="Apartment", description="Type of property")
+    bedrooms: Optional[int] = None
+    location: Optional[str] = None
+    square_feet: Optional[int] = None
+    address: Optional[str] = None
 
 
 class MintNFTResponse(BaseModel):
@@ -122,10 +196,164 @@ async def get_blockchain_status():
         )
 
 
+@router.post("/prepare-mint", response_model=PrepareMintResponse)
+async def prepare_mint(request: PrepareMintRequest):
+    """
+    Prepare NFT mint (User will sign the transaction)
+    
+    Steps:
+    1. Upload image to IPFS
+    2. Create and upload metadata to IPFS
+    3. Prepare transaction data (ABI encoded)
+    4. Return data for user to sign in their wallet
+    
+    User flow:
+    - Frontend calls this endpoint
+    - Backend uploads to IPFS and prepares transaction
+    - Frontend uses WalletConnect to get user signature
+    - Frontend calls /confirm-mint with transaction hash
+    """
+    try:
+        logger.info(f"Preparing NFT mint for asset: {request.asset_name}")
+        
+        # Step 1 & 2: Upload to IPFS
+        metadata_uri = ipfs_service.create_asset_metadata(
+            asset_name=request.asset_name,
+            description=request.description,
+            image_url=request.image_url,
+            property_type=request.property_type,
+            bedrooms=request.bedrooms,
+            location=request.location,
+            total_shares=request.total_shares,
+            square_feet=request.square_feet,
+            address=request.address
+        )
+        
+        if not metadata_uri:
+            raise HTTPException(
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                detail="Failed to upload metadata to IPFS"
+            )
+        
+        logger.info(f"Metadata uploaded: {metadata_uri}")
+        
+        # Get IPFS image URL for preview
+        ipfs_image_url = ipfs_service.get_last_uploaded_image_url() or request.image_url
+        
+        # Step 3: Prepare transaction data (ABI encoded)
+        # Function: mintInitialSupply(uint256 tokenId, address initialOwner, uint256 amount, string metadataURI)
+        from web3 import Web3
+        
+        contract = web3_service.w3.eth.contract(
+            address=Web3.to_checksum_address(web3_service.building_address),
+            abi=web3_service.building_abi
+        )
+        
+        # Encode function data
+        function_data = contract.encodeABI(
+            fn_name="mintInitialSupply",
+            args=[
+                request.token_id,
+                Web3.to_checksum_address(request.owner_address),
+                request.total_shares,
+                metadata_uri
+            ]
+        )
+        
+        # Estimate gas
+        gas_estimate = "0.05 POL"  # Rough estimate, actual will be calculated by wallet
+        
+        return PrepareMintResponse(
+            success=True,
+            token_id=request.token_id,
+            metadata_uri=metadata_uri,
+            contract_address=web3_service.building_address,
+            function_data=function_data.hex() if isinstance(function_data, bytes) else function_data,
+            gas_estimate=gas_estimate,
+            ipfs_image_url=ipfs_image_url,
+            message="Metadata uploaded to IPFS. Ready for user to sign transaction."
+        )
+        
+    except Exception as e:
+        logger.error(f"Error preparing NFT mint: {str(e)}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to prepare mint: {str(e)}"
+        )
+
+
+@router.post("/confirm-mint")
+async def confirm_mint(request: ConfirmMintRequest):
+    """
+    Confirm NFT mint after user signs transaction
+    
+    This endpoint is called after the user signs and broadcasts
+    the transaction from their wallet. It records the mint in
+    our system for indexing and tracking.
+    """
+    try:
+        logger.info(f"Confirming NFT mint: token_id={request.token_id}, tx={request.transaction_hash}")
+        
+        # Wait for transaction to be mined (with timeout)
+        try:
+            tx_receipt = web3_service.w3.eth.wait_for_transaction_receipt(
+                request.transaction_hash, 
+                timeout=120  # Wait up to 2 minutes
+            )
+        except Exception as wait_error:
+            logger.warning(f"Transaction not mined yet: {wait_error}")
+            # Save token to cache even if pending
+            _save_minted_token(request.token_id)
+            # Return success anyway - transaction is submitted
+            return {
+                "success": True,
+                "token_id": request.token_id,
+                "transaction_hash": request.transaction_hash,
+                "opensea_url": f"https://opensea.io/assets/matic/{web3_service.building_address}/{request.token_id}",
+                "message": "Transaction submitted! It may take a few moments to appear on blockchain.",
+                "pending": True
+            }
+        
+        if not tx_receipt or tx_receipt.status != 1:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Transaction failed or not found on blockchain"
+            )
+        
+        # Get block number
+        block_number = tx_receipt.blockNumber
+        
+        # Generate OpenSea URL
+        opensea_url = f"https://opensea.io/assets/matic/{web3_service.building_address}/{request.token_id}"
+        
+        # Save token to cache for indexing
+        _save_minted_token(request.token_id)
+        
+        return {
+            "success": True,
+            "token_id": request.token_id,
+            "transaction_hash": request.transaction_hash,
+            "block_number": block_number,
+            "opensea_url": opensea_url,
+            "message": "NFT mint confirmed successfully!"
+        }
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error confirming NFT mint: {str(e)}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to confirm mint: {str(e)}"
+        )
+
+
 @router.post("/mint", response_model=MintNFTResponse)
 async def mint_nft(request: MintNFTRequest):
     """
-    Mint a new fractional NFT asset
+    DEPRECATED: Direct mint from backend (uses backend's private key)
+    
+    Use /prepare-mint + /confirm-mint for user-signed transactions instead.
     
     Steps:
     1. Upload image to IPFS
@@ -146,9 +374,7 @@ async def mint_nft(request: MintNFTRequest):
             location=request.location,
             total_shares=request.total_shares,
             square_feet=request.square_feet,
-            address=request.address,
-            rental_yield=request.rental_yield,
-            estimated_value=request.estimated_value
+            address=request.address
         )
         
         if not metadata_uri:
@@ -194,6 +420,103 @@ async def mint_nft(request: MintNFTRequest):
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=str(e)
+        )
+
+
+@router.get("/holdings/{wallet_address}")
+async def get_user_holdings(wallet_address: str):
+    """
+    Get user's NFT holdings for Building1122 contract
+    Uses Alchemy NFT API for reliable ownership data
+    """
+    try:
+        response = await alchemy_service.get_nfts_for_owner(
+            owner_address=wallet_address,
+            contract_address=web3_service.building_address
+        )
+        
+        # Alchemy returns {"ownedNfts": [...], "totalCount": ...}
+        nfts = response.get("ownedNfts", [])
+        
+        # Transform to UserNftHolding format expected by Flutter
+        holdings = []
+        for nft in nfts:
+            token_id = int(nft.get("tokenId", 0))
+            balance = int(nft.get("balance", "1"))
+            
+            # Get metadata
+            name = nft.get("name", "") or nft.get("title", "") or f"Asset #{token_id}"
+            image_url = ""
+            if nft.get("image"):
+                image_url = nft["image"].get("cachedUrl") or nft["image"].get("originalUrl", "")
+            elif nft.get("raw", {}).get("metadata", {}).get("image"):
+                image_url = nft["raw"]["metadata"]["image"]
+            
+            # Get total supply from contract
+            try:
+                total_shares = web3_service.w3.eth.contract(
+                    address=web3_service.building_address,
+                    abi=web3_service.building_abi
+                ).functions.totalSupply(token_id).call()
+            except:
+                total_shares = 1000  # Default
+            
+            holdings.append({
+                "token_id": token_id,
+                "name": name,
+                "image_url": image_url,
+                "shares": balance,
+                "total_shares": total_shares,
+                "ownership_percentage": (balance / total_shares * 100) if total_shares > 0 else 0,
+                "estimated_value": "0"  # TODO: Add price oracle
+            })
+        
+        return holdings
+        
+    except Exception as e:
+        logger.error(f"Error fetching holdings: {e}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to fetch holdings: {str(e)}"
+        )
+
+
+@router.get("/assets")
+async def list_assets(
+    limit: int = 20,
+    offset: int = 0,
+    owner_address: Optional[str] = None
+):
+    """
+    Get list of NFT assets
+    
+    If owner_address provided, returns assets owned by that address.
+    Otherwise returns recent mints (from blockchain events).
+    """
+    try:
+        # If owner filter exists, use Alchemy (reliable ownership, includes transfers)
+        if owner_address:
+            return await alchemy_service.owner_assets_smartrent_shape(
+                owner_address=owner_address,
+                contract_address=web3_service.building_address,
+                limit=limit,
+            )
+
+        # No owner filter: this endpoint will be repurposed for Marketplace listings.
+        # For now, return empty to avoid showing all minted tokens (as requested).
+        return {
+            "assets": [],
+            "total": 0,
+            "limit": limit,
+            "offset": offset,
+            "message": "Marketplace listings coming soon. Provide owner_address to list your NFTs.",
+        }
+            
+    except Exception as e:
+        logger.error(f"Error listing assets: {e}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to list assets: {str(e)}"
         )
 
 

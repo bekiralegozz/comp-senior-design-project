@@ -17,36 +17,24 @@ class SettingsScreen extends ConsumerWidget {
       body: ListView(
         children: [
           // Account Section
-          _buildSectionHeader(context, 'Account'),
-          ListTile(
-            leading: const Icon(Icons.person_outline),
-            title: const Text('Profile'),
-            subtitle: Text(authState.profile?.fullName ?? 'Not set'),
-            trailing: const Icon(Icons.chevron_right),
-            onTap: () {
-              // Navigate to profile edit
-            },
-          ),
-          ListTile(
-            leading: const Icon(Icons.email_outlined),
-            title: const Text('Email'),
-            subtitle: Text(authState.profile?.email ?? 'Not set'),
-            trailing: const Icon(Icons.chevron_right),
-            onTap: () {
-              // Navigate to email edit
-            },
-          ),
-          const Divider(),
-
-          // Wallet Section
-          _buildSectionHeader(context, 'Wallet'),
+          _buildSectionHeader(context, 'Wallet Identity'),
           ListTile(
             leading: const Icon(Icons.account_balance_wallet_outlined),
             title: const Text('Connected Wallet'),
-            subtitle: Text(authState.profile?.walletAddress ?? 'Not connected'),
-            trailing: const Icon(Icons.chevron_right),
+            subtitle: Text(
+              authState.walletAddress != null
+                  ? '${authState.walletAddress!.substring(0, 6)}...${authState.walletAddress!.substring(authState.walletAddress!.length - 4)}'
+                  : 'Not connected',
+            ),
+            trailing: const Icon(Icons.copy_outlined),
             onTap: () {
-              // Navigate to wallet settings
+              if (authState.walletAddress != null) {
+                // Copy wallet address to clipboard
+                // Clipboard.setData(ClipboardData(text: authState.walletAddress!));
+                ScaffoldMessenger.of(context).showSnackBar(
+                  const SnackBar(content: Text('Wallet address copied')),
+                );
+              }
             },
           ),
           const Divider(),
@@ -101,19 +89,19 @@ class SettingsScreen extends ConsumerWidget {
           ),
           const Divider(),
 
-          // Logout
+          // Disconnect Wallet
           ListTile(
             leading: const Icon(Icons.logout, color: Colors.red),
             title: const Text(
-              'Logout',
+              'Disconnect Wallet',
               style: TextStyle(color: Colors.red),
             ),
             onTap: () async {
               final confirm = await showDialog<bool>(
                 context: context,
                 builder: (context) => AlertDialog(
-                  title: const Text('Logout'),
-                  content: const Text('Are you sure you want to logout?'),
+                  title: const Text('Disconnect Wallet'),
+                  content: const Text('Are you sure you want to disconnect your wallet?'),
                   actions: [
                     TextButton(
                       onPressed: () => Navigator.of(context).pop(false),
@@ -121,7 +109,7 @@ class SettingsScreen extends ConsumerWidget {
                     ),
                     TextButton(
                       onPressed: () => Navigator.of(context).pop(true),
-                      child: const Text('Logout'),
+                      child: const Text('Disconnect'),
                     ),
                   ],
                 ),
@@ -129,9 +117,9 @@ class SettingsScreen extends ConsumerWidget {
 
               if (confirm == true) {
                 await ref.read(authStateProvider.notifier).logout();
-                // Navigate to login screen after logout
+                // Navigate to wallet connect screen after logout
                 if (context.mounted) {
-                  context.go('/auth/login');
+                  context.go('/auth/wallet');
                 }
               }
             },

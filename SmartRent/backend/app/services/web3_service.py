@@ -51,17 +51,28 @@ class Web3Service:
         self.rental_manager_address = getattr(settings, 'RENTAL_MANAGER_CONTRACT_ADDRESS', None)
     
     def _load_contract_abi(self, contract_name: str) -> List:
-        """Load contract ABI from artifacts"""
+        """Load contract ABI from abis folder"""
         try:
-            abi_path = Path(__file__).parent.parent.parent.parent / "blockchain" / "artifacts" / "contracts" / f"{contract_name}.sol" / f"{contract_name}.json"
+            # Try new path first (abis folder - directly generated ABIs)
+            abi_path = Path(__file__).parent.parent.parent.parent / "blockchain" / "abis" / f"{contract_name}.json"
             
             if abi_path.exists():
                 with open(abi_path, 'r') as f:
                     contract_data = json.load(f)
+                    # ABI might be directly in the file or nested under 'abi' key
+                    if isinstance(contract_data, list):
+                        return contract_data
                     return contract_data.get('abi', [])
-            else:
-                logger.warning(f"ABI file not found for {contract_name} at {abi_path}")
-                return []
+            
+            # Fallback to old path (hardhat artifacts)
+            abi_path = Path(__file__).parent.parent.parent.parent / "blockchain" / "artifacts" / "contracts" / f"{contract_name}.sol" / f"{contract_name}.json"
+            if abi_path.exists():
+                with open(abi_path, 'r') as f:
+                    contract_data = json.load(f)
+                    return contract_data.get('abi', [])
+            
+            logger.warning(f"ABI file not found for {contract_name}")
+            return []
         except Exception as e:
             logger.error(f"Error loading ABI for {contract_name}: {str(e)}")
             return []

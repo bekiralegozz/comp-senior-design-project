@@ -14,7 +14,7 @@ class AppConfig {
   static const String wsUrl = 'wss://polygon-rpc.com';
   static const String web3ProviderUrl = rpcUrl;
   static const String networkName = 'Polygon';
-  static const String currencySymbol = 'MATIC';
+  static const String currencySymbol = 'POL'; // Formerly MATIC, rebranded to POL
   
   // WalletConnect Configuration
   static const String walletConnectProjectId = 'YOUR_WALLETCONNECT_PROJECT_ID';

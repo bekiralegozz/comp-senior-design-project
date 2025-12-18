@@ -2,15 +2,13 @@ import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
-import '../../services/models.dart';
-import '../../screens/auth/login_screen.dart';
-import '../../screens/auth/register_screen.dart';
 import '../../screens/auth/wallet_connect_screen.dart';
 import '../../screens/home_screen.dart';
 import '../../screens/asset_details.dart';
 import '../../screens/rental_screen.dart';
 import '../../screens/profile_screen.dart';
 import '../../screens/assets/create_asset_blockchain_screen.dart';
+import '../../screens/assets/create_asset_screen.dart';
 import '../../screens/assets/my_assets_screen.dart';
 import '../../screens/rentals/rental_details_screen.dart';
 import '../../screens/rentals/pay_rent_blockchain_screen.dart';
@@ -29,42 +27,22 @@ final goRouterProvider = Provider<GoRouter>((ref) {
     debugLogDiagnostics: true,
     redirect: (context, state) {
       final isLoggedIn = authState.isAuthenticated;
-      final isAuthRoute = state.matchedLocation.startsWith('/auth');
+      final isWalletConnectRoute = state.matchedLocation == '/auth/wallet';
 
-      // Redirect to login if not authenticated and not on auth route
-      if (!isLoggedIn && !isAuthRoute) {
-        return '/auth/login';
+      // Redirect to wallet connect if not authenticated and not already there
+      if (!isLoggedIn && !isWalletConnectRoute) {
+        return '/auth/wallet';
       }
 
-      // Redirect to home if authenticated and on auth route
-      if (isLoggedIn && isAuthRoute) {
+      // Redirect to home if authenticated and on wallet connect route
+      if (isLoggedIn && isWalletConnectRoute) {
         return '/';
       }
 
       return null;
     },
     routes: [
-      // Auth Routes
-      GoRoute(
-        path: '/auth',
-        redirect: (context, state) => '/auth/login',
-      ),
-      GoRoute(
-        path: '/auth/login',
-        name: 'login',
-        pageBuilder: (context, state) => MaterialPage(
-          key: state.pageKey,
-          child: const LoginScreen(),
-        ),
-      ),
-      GoRoute(
-        path: '/auth/register',
-        name: 'register',
-        pageBuilder: (context, state) => MaterialPage(
-          key: state.pageKey,
-          child: const RegisterScreen(),
-        ),
-      ),
+      // Auth Routes (SIWE Wallet-Only)
       GoRoute(
         path: '/auth/wallet',
         name: 'wallet-connect',
@@ -90,7 +68,15 @@ final goRouterProvider = Provider<GoRouter>((ref) {
         name: 'create-asset',
         pageBuilder: (context, state) => MaterialPage(
           key: state.pageKey,
-          child: const CreateAssetBlockchainScreen(), // UPDATED: Blockchain version
+          child: const CreateAssetScreen(), // New: User-signed mint
+        ),
+      ),
+      GoRoute(
+        path: '/assets/create-legacy',
+        name: 'create-asset-legacy',
+        pageBuilder: (context, state) => MaterialPage(
+          key: state.pageKey,
+          child: const CreateAssetBlockchainScreen(), // Old: Backend-signed
         ),
       ),
       GoRoute(
@@ -123,13 +109,13 @@ final goRouterProvider = Provider<GoRouter>((ref) {
         ),
       ),
       GoRoute(
-        path: '/rentals/pay/:assetId', // UPDATED: Changed from 'create' to 'pay'
+        path: '/rentals/pay/:assetId',
         name: 'pay-rent',
         pageBuilder: (context, state) {
           final assetId = state.pathParameters['assetId']!;
           return MaterialPage(
             key: state.pageKey,
-            child: PayRentBlockchainScreen(assetId: assetId), // UPDATED: Blockchain version
+            child: PayRentBlockchainScreen(assetId: assetId),
           );
         },
       ),

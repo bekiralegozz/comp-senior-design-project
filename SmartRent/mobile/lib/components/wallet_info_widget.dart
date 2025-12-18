@@ -1,28 +1,35 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
-import 'package:provider/provider.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
-import '../providers/wallet_provider.dart';
+import '../core/providers/auth_provider.dart';
+import '../core/providers/wallet_provider.dart';
 
-class WalletInfoWidget extends StatelessWidget {
+/// ==========================================================
+/// WALLET INFO WIDGET - BLOCKCHAIN MIGRATION VERSION
+/// ==========================================================
+///
+/// Uses Riverpod providers for wallet state.
+/// Shows wallet connection status and balance.
+
+class WalletInfoWidget extends ConsumerWidget {
   const WalletInfoWidget({Key? key}) : super(key: key);
 
   @override
-  Widget build(BuildContext context) {
-    return Consumer<WalletProvider>(
-      builder: (context, walletProvider, child) {
-        if (!walletProvider.isConnected) {
-          return _buildConnectButton(context, walletProvider);
-        }
+  Widget build(BuildContext context, WidgetRef ref) {
+    final authState = ref.watch(authStateProvider);
+    final walletState = ref.watch(walletProvider);
 
-        return _buildWalletInfo(context, walletProvider);
-      },
-    );
+    if (!authState.isAuthenticated) {
+      return _buildConnectButton(context);
+    }
+
+    return _buildWalletInfo(context, ref, authState, walletState);
   }
 
-  Widget _buildConnectButton(BuildContext context, WalletProvider walletProvider) {
+  Widget _buildConnectButton(BuildContext context) {
     return ElevatedButton.icon(
-      onPressed: () => _navigateToConnection(context),
+      onPressed: () => context.go('/auth/wallet'),
       icon: const Icon(Icons.account_balance_wallet),
       label: const Text('Connect Wallet'),
       style: ElevatedButton.styleFrom(
@@ -31,7 +38,20 @@ class WalletInfoWidget extends StatelessWidget {
     );
   }
 
-  Widget _buildWalletInfo(BuildContext context, WalletProvider walletProvider) {
+  Widget _buildWalletInfo(
+    BuildContext context,
+    WidgetRef ref,
+    AuthState authState,
+    WalletState walletState,
+  ) {
+    final walletAddress = authState.walletAddress ?? walletState.address ?? '';
+    final shortAddress = walletAddress.isNotEmpty
+        ? '${walletAddress.substring(0, 6)}...${walletAddress.substring(walletAddress.length - 4)}'
+        : 'Unknown';
+    
+    // Use balance from authState (primary) or fallback to walletState
+    final balance = authState.balance ?? walletState.balance ?? '0.0000';
+
     return Container(
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
@@ -72,13 +92,33 @@ class WalletInfoWidget extends StatelessWidget {
                     ),
                   ),
                   const SizedBox(width: 12),
-                  const Text(
-                    'Connected Wallet',
-                    style: TextStyle(
-                      color: Colors.white,
-                      fontSize: 14,
-                      fontWeight: FontWeight.w500,
-                    ),
+                  Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      const Text(
+                        'Connected Wallet',
+                        style: TextStyle(
+                          color: Colors.white,
+                          fontSize: 14,
+                          fontWeight: FontWeight.w500,
+                        ),
+                      ),
+                      Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                        decoration: BoxDecoration(
+                          color: Colors.white.withOpacity(0.2),
+                          borderRadius: BorderRadius.circular(4),
+                        ),
+                        child: const Text(
+                          'Polygon',
+                          style: TextStyle(
+                            color: Colors.white,
+                            fontSize: 10,
+                            fontWeight: FontWeight.w600,
+                          ),
+                        ),
+                      ),
+                    ],
                   ),
                 ],
               ),
@@ -86,11 +126,11 @@ class WalletInfoWidget extends StatelessWidget {
                 icon: const Icon(Icons.more_vert, color: Colors.white),
                 onSelected: (value) {
                   if (value == 'refresh') {
-                    walletProvider.refreshBalance();
+                    ref.read(authStateProvider.notifier).refreshBalance();
                   } else if (value == 'copy') {
-                    _copyAddress(context, walletProvider.walletAddress!);
+                    _copyAddress(context, walletAddress);
                   } else if (value == 'disconnect') {
-                    _showDisconnectDialog(context, walletProvider);
+                    _showDisconnectDialog(context, ref);
                   }
                 },
                 itemBuilder: (context) => [
@@ -132,7 +172,7 @@ class WalletInfoWidget extends StatelessWidget {
           
           // Address
           InkWell(
-            onTap: () => _copyAddress(context, walletProvider.walletAddress!),
+            onTap: () => _copyAddress(context, walletAddress),
             child: Container(
               padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
               decoration: BoxDecoration(
@@ -143,7 +183,7 @@ class WalletInfoWidget extends StatelessWidget {
                 children: [
                   Expanded(
                     child: Text(
-                      walletProvider.shortAddress,
+                      shortAddress,
                       style: const TextStyle(
                         color: Colors.white,
                         fontSize: 16,
@@ -178,7 +218,7 @@ class WalletInfoWidget extends StatelessWidget {
                     ),
                   ),
                   const SizedBox(height: 4),
-                  walletProvider.isLoading
+                  walletState.isLoading
                       ? const SizedBox(
                           height: 20,
                           width: 20,
@@ -188,7 +228,7 @@ class WalletInfoWidget extends StatelessWidget {
                           ),
                         )
                       : Text(
-                          '${walletProvider.balanceFormatted} MATIC',
+                          '$balance POL',
                           style: const TextStyle(
                             color: Colors.white,
                             fontSize: 24,
@@ -198,7 +238,7 @@ class WalletInfoWidget extends StatelessWidget {
                 ],
               ),
               IconButton(
-                onPressed: () => walletProvider.refreshBalance(),
+                onPressed: () => ref.read(authStateProvider.notifier).refreshBalance(),
                 icon: const Icon(Icons.refresh, color: Colors.white),
                 tooltip: 'Refresh Balance',
               ),
@@ -210,6 +250,7 @@ class WalletInfoWidget extends StatelessWidget {
   }
 
   void _copyAddress(BuildContext context, String address) {
+    if (address.isEmpty) return;
     Clipboard.setData(ClipboardData(text: address));
     ScaffoldMessenger.of(context).showSnackBar(
       const SnackBar(
@@ -219,11 +260,7 @@ class WalletInfoWidget extends StatelessWidget {
     );
   }
 
-  Future<void> _navigateToConnection(BuildContext context) async {
-    context.go('/wallet-connection');
-  }
-
-  Future<void> _showDisconnectDialog(BuildContext context, WalletProvider walletProvider) async {
+  Future<void> _showDisconnectDialog(BuildContext context, WidgetRef ref) async {
     final confirmed = await showDialog<bool>(
       context: context,
       builder: (context) => AlertDialog(
@@ -246,13 +283,12 @@ class WalletInfoWidget extends StatelessWidget {
     );
 
     if (confirmed == true) {
-      await walletProvider.disconnect();
+      await ref.read(authStateProvider.notifier).logout();
       if (context.mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('Wallet disconnected'),
-          ),
+          const SnackBar(content: Text('Wallet disconnected')),
         );
+        context.go('/auth/wallet');
       }
     }
   }
