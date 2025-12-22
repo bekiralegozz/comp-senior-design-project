@@ -65,7 +65,7 @@ class AssetCard extends StatelessWidget {
                     const SizedBox(height: 4),
                     
                     // Location
-                    if (asset.location != null && asset.location!.isNotEmpty)
+                    if (asset.locationString.isNotEmpty && asset.locationString != 'Unknown')
                       _buildLocationSection(theme),
                     
                     // Owner (if enabled)
@@ -161,13 +161,13 @@ class AssetCard extends StatelessWidget {
                 vertical: AppSpacing.xs,
               ),
               decoration: BoxDecoration(
-                color: asset.isAvailable 
+                color: (asset.isAvailable ?? false)
                     ? AppColors.success 
                     : AppColors.warning,
                 borderRadius: BorderRadius.circular(AppRadius.sm),
               ),
               child: Text(
-                asset.isAvailable ? 'Available' : 'Rented',
+                (asset.isAvailable ?? false) ? 'Available' : 'Rented',
                 style: theme.textTheme.bodySmall?.copyWith(
                   color: Colors.white,
                   fontWeight: FontWeight.w600,
@@ -193,13 +193,13 @@ class AssetCard extends StatelessWidget {
                 mainAxisSize: MainAxisSize.min,
                 children: [
                   Icon(
-                    AssetCategories.icons[asset.category] ?? Icons.category,
+                    AssetCategories.icons[asset.category ?? 'other'] ?? Icons.category,
                     size: 14,
                     color: Colors.white,
                   ),
                   const SizedBox(width: AppSpacing.xs),
                   Text(
-                    AssetCategories.getDisplayName(asset.category),
+                    AssetCategories.getDisplayName(asset.category ?? 'other'),
                     style: theme.textTheme.bodySmall?.copyWith(
                       color: Colors.white,
                       fontWeight: FontWeight.w500,
@@ -220,7 +220,7 @@ class AssetCard extends StatelessWidget {
       mainAxisSize: MainAxisSize.min,
       children: [
         Text(
-          asset.title,
+          asset.title ?? 'Unnamed Asset',
           style: theme.textTheme.titleMedium?.copyWith(
             fontWeight: FontWeight.bold,
           ),
@@ -305,7 +305,7 @@ class AssetCard extends StatelessWidget {
           const SizedBox(width: AppSpacing.xs),
           Expanded(
             child: Text(
-              asset.location!,
+              asset.locationString,
               style: theme.textTheme.bodySmall?.copyWith(
                 color: AppColors.grey,
               ),
@@ -395,21 +395,21 @@ class AssetCard extends StatelessWidget {
         
         const Spacer(),
         
-        // Quick action button
-        if (asset.isAvailable)
+        // Quick action button - Red Rent button
+        if (asset.isAvailable ?? false)
           Container(
             padding: const EdgeInsets.symmetric(
               horizontal: AppSpacing.sm,
               vertical: AppSpacing.xs,
             ),
             decoration: BoxDecoration(
-              color: AppColors.primary.withOpacity(0.1),
+              color: Colors.red,
               borderRadius: BorderRadius.circular(AppRadius.sm),
             ),
             child: Text(
               'Rent',
               style: theme.textTheme.bodySmall?.copyWith(
-                color: AppColors.primary,
+                color: Colors.white,
                 fontWeight: FontWeight.w600,
               ),
             ),
@@ -418,6 +418,7 @@ class AssetCard extends StatelessWidget {
     );
   }
 }
+
 
 
 

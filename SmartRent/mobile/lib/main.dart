@@ -39,10 +39,3 @@ class SmartRentApp extends ConsumerWidget {
     );
   }
 }
-
-
-
-
-
-
-

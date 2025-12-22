@@ -2,18 +2,20 @@ import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
-import '../../screens/auth/login_screen.dart';
-import '../../screens/auth/register_screen.dart';
 import '../../screens/auth/wallet_connect_screen.dart';
 import '../../screens/home_screen.dart';
 import '../../screens/asset_details.dart';
 import '../../screens/rental_screen.dart';
 import '../../screens/profile_screen.dart';
+import '../../screens/assets/create_asset_blockchain_screen.dart';
 import '../../screens/assets/create_asset_screen.dart';
 import '../../screens/assets/my_assets_screen.dart';
 import '../../screens/rentals/rental_details_screen.dart';
-import '../../screens/rentals/create_rental_screen.dart';
+import '../../screens/rentals/pay_rent_blockchain_screen.dart';
 import '../../screens/wallet/wallet_screen.dart';
+import '../../screens/wallet/wallet_connection_screen.dart';
+import '../../screens/nft/nft_gallery_screen.dart';
+import '../../screens/nft/nft_portfolio_screen.dart';
 import '../../screens/settings/settings_screen.dart';
 import '../providers/auth_provider.dart';
 
@@ -25,42 +27,22 @@ final goRouterProvider = Provider<GoRouter>((ref) {
     debugLogDiagnostics: true,
     redirect: (context, state) {
       final isLoggedIn = authState.isAuthenticated;
-      final isAuthRoute = state.matchedLocation.startsWith('/auth');
+      final isWalletConnectRoute = state.matchedLocation == '/auth/wallet';
 
-      // Redirect to login if not authenticated and not on auth route
-      if (!isLoggedIn && !isAuthRoute) {
-        return '/auth/login';
+      // Redirect to wallet connect if not authenticated and not already there
+      if (!isLoggedIn && !isWalletConnectRoute) {
+        return '/auth/wallet';
       }
 
-      // Redirect to home if authenticated and on auth route
-      if (isLoggedIn && isAuthRoute) {
+      // Redirect to home if authenticated and on wallet connect route
+      if (isLoggedIn && isWalletConnectRoute) {
         return '/';
       }
 
       return null;
     },
     routes: [
-      // Auth Routes
-      GoRoute(
-        path: '/auth',
-        redirect: (context, state) => '/auth/login',
-      ),
-      GoRoute(
-        path: '/auth/login',
-        name: 'login',
-        pageBuilder: (context, state) => MaterialPage(
-          key: state.pageKey,
-          child: const LoginScreen(),
-        ),
-      ),
-      GoRoute(
-        path: '/auth/register',
-        name: 'register',
-        pageBuilder: (context, state) => MaterialPage(
-          key: state.pageKey,
-          child: const RegisterScreen(),
-        ),
-      ),
+      // Auth Routes (SIWE Wallet-Only)
       GoRoute(
         path: '/auth/wallet',
         name: 'wallet-connect',
@@ -86,7 +68,15 @@ final goRouterProvider = Provider<GoRouter>((ref) {
         name: 'create-asset',
         pageBuilder: (context, state) => MaterialPage(
           key: state.pageKey,
-          child: const CreateAssetScreen(),
+          child: const CreateAssetScreen(), // New: User-signed mint
+        ),
+      ),
+      GoRoute(
+        path: '/assets/create-legacy',
+        name: 'create-asset-legacy',
+        pageBuilder: (context, state) => MaterialPage(
+          key: state.pageKey,
+          child: const CreateAssetBlockchainScreen(), // Old: Backend-signed
         ),
       ),
       GoRoute(
@@ -119,13 +109,13 @@ final goRouterProvider = Provider<GoRouter>((ref) {
         ),
       ),
       GoRoute(
-        path: '/rentals/create/:assetId',
-        name: 'create-rental',
+        path: '/rentals/pay/:assetId',
+        name: 'pay-rent',
         pageBuilder: (context, state) {
           final assetId = state.pathParameters['assetId']!;
           return MaterialPage(
             key: state.pageKey,
-            child: CreateRentalScreen(assetId: assetId),
+            child: PayRentBlockchainScreen(assetId: assetId),
           );
         },
       ),
@@ -149,6 +139,35 @@ final goRouterProvider = Provider<GoRouter>((ref) {
           key: state.pageKey,
           child: const WalletScreen(),
         ),
+      ),
+      GoRoute(
+        path: '/wallet-connection',
+        name: 'wallet-connection',
+        pageBuilder: (context, state) => MaterialPage(
+          key: state.pageKey,
+          child: const WalletConnectionScreen(),
+        ),
+      ),
+
+      // NFT Routes
+      GoRoute(
+        path: '/nft-gallery',
+        name: 'nft-gallery',
+        pageBuilder: (context, state) => MaterialPage(
+          key: state.pageKey,
+          child: const NftGalleryScreen(),
+        ),
+      ),
+      GoRoute(
+        path: '/nft-portfolio',
+        name: 'nft-portfolio',
+        pageBuilder: (context, state) {
+          final walletAddress = state.uri.queryParameters['wallet'];
+          return MaterialPage(
+            key: state.pageKey,
+            child: NftPortfolioScreen(walletAddress: walletAddress),
+          );
+        },
       ),
 
       // Profile & Settings

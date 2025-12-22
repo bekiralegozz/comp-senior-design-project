@@ -1,41 +1,44 @@
 """
-Supabase client factory utilities.
+DEPRECATED: Supabase client factory utilities.
+
+MIGRATION NOTE (Dec 2025):
+- Supabase has been removed from the architecture
+- Backend now uses blockchain as source of truth
+- This file is kept as a stub to prevent import errors during migration
+- All functions raise NotImplementedError
+
+TODO: Remove this file completely after all dependent code is updated
 """
 
-from functools import lru_cache
-from typing import Literal
-
-from supabase import Client, create_client
-
-from app.core.config import settings
+from typing import Literal, Any
 
 
 class SupabaseConfigurationError(RuntimeError):
     """Raised when Supabase configuration is missing or invalid."""
+    pass
 
 
-@lru_cache
-def _build_supabase_client(scope: Literal["service", "anon"] = "service") -> Client:
-    """Create and memoize a Supabase client instance for the requested scope."""
-    url = settings.SUPABASE_URL
-    if not url:
-        raise SupabaseConfigurationError("SUPABASE_URL is not configured")
-
-    if scope == "service":
-        key = settings.SUPABASE_SERVICE_ROLE_KEY
-    else:
-        key = settings.SUPABASE_ANON_KEY
-
-    if not key:
-        raise SupabaseConfigurationError(
-            f"{'SUPABASE_SERVICE_ROLE_KEY' if scope == 'service' else 'SUPABASE_ANON_KEY'} is not configured"
-        )
-
-    return create_client(url, key)
+class SupabaseDeprecatedError(RuntimeError):
+    """Raised when deprecated Supabase functions are called."""
+    pass
 
 
-def get_supabase_client(use_service_role: bool = True) -> Client:
-    """Return a cached Supabase client for the requested scope."""
-    scope: Literal["service", "anon"] = "service" if use_service_role else "anon"
-    return _build_supabase_client(scope)
+def get_supabase_client(use_service_role: bool = True) -> Any:
+    """
+    DEPRECATED: Supabase client is no longer available.
+    
+    Raises:
+        SupabaseDeprecatedError: Always, as Supabase has been removed
+    """
+    raise SupabaseDeprecatedError(
+        "Supabase has been removed from SmartRent. "
+        "The application now uses blockchain as the source of truth. "
+        "Please update your code to use blockchain services instead."
+    )
 
+
+def _build_supabase_client(scope: Literal["service", "anon"] = "service") -> Any:
+    """DEPRECATED: See get_supabase_client()"""
+    raise SupabaseDeprecatedError(
+        "Supabase has been removed. Use blockchain services instead."
+    )

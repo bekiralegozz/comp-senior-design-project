@@ -41,5 +41,25 @@
             <action android:name="android.intent.action.PROCESS_TEXT"/>
             <data android:mimeType="text/plain"/>
         </intent>
+        
+        <!-- WalletConnect: Allow querying wallet apps (Android 11+) -->
+        <!-- Trust Wallet -->
+        <package android:name="com.wallet.crypto.trustapp" />
+        
+        <!-- MetaMask -->
+        <package android:name="io.metamask" />
+        
+        <!-- Rainbow Wallet -->
+        <package android:name="me.rainbow" />
+        
+        <!-- Generic WalletConnect support -->
+        <intent>
+            <action android:name="android.intent.action.VIEW" />
+            <data android:scheme="wc" />
+        </intent>
+        <intent>
+            <action android:name="android.intent.action.VIEW" />
+            <data android:scheme="https" />
+        </intent>
     </queries>
 </manifest>

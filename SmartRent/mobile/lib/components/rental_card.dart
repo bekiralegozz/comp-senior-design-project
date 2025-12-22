@@ -4,6 +4,13 @@ import 'package:intl/intl.dart';
 import '../constants/config.dart';
 import '../services/models.dart';
 
+/// ==========================================================
+/// RENTAL CARD - BLOCKCHAIN MIGRATION VERSION
+/// ==========================================================
+///
+/// Displays rental information with blockchain awareness.
+/// Handles nullable fields gracefully.
+
 class RentalCard extends StatelessWidget {
   final Rental rental;
   final VoidCallback? onTap;
@@ -47,12 +54,14 @@ class RentalCard extends StatelessWidget {
             if (rental.asset != null) _buildAssetInfo(theme),
             
             // Rental details
+            if (rental.startDate != null && rental.endDate != null)
             _buildRentalDetails(theme),
             
             if (!compact) ...[
               const SizedBox(height: AppSpacing.sm),
               
               // Timeline or actions
+              if (rental.startDate != null && rental.endDate != null)
               _buildBottomSection(theme),
             ],
           ],
@@ -62,8 +71,9 @@ class RentalCard extends StatelessWidget {
   }
 
   Widget _buildHeader(ThemeData theme) {
-    final statusColor = RentalStatus.colors[rental.status] ?? AppColors.grey;
-    final statusIcon = RentalStatus.icons[rental.status] ?? Icons.help_outline;
+    final status = rental.status ?? 'pending';
+    final statusColor = RentalStatus.colors[status] ?? AppColors.grey;
+    final statusIcon = RentalStatus.icons[status] ?? Icons.help_outline;
     
     return Row(
       children: [
@@ -85,23 +95,39 @@ class RentalCard extends StatelessWidget {
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               Text(
-                'Rental #${rental.id}',
+                'Rental #${rental.id.length > 8 ? rental.id.substring(0, 8) : rental.id}',
                 style: theme.textTheme.titleMedium?.copyWith(
                   fontWeight: FontWeight.bold,
                 ),
               ),
+              Row(
+                children: [
               Text(
-                RentalStatus.getDisplayName(rental.status),
+                    RentalStatus.getDisplayName(status),
                 style: theme.textTheme.bodySmall?.copyWith(
                   color: statusColor,
                   fontWeight: FontWeight.w600,
                 ),
+                  ),
+                  if (rental.txHash != null) ...[
+                    const SizedBox(width: AppSpacing.xs),
+                    Icon(Icons.check_circle, size: 12, color: AppColors.success),
+                    const SizedBox(width: 2),
+                    Text(
+                      'On-chain',
+                      style: theme.textTheme.bodySmall?.copyWith(
+                        color: AppColors.success,
+                        fontSize: 10,
+                      ),
+                    ),
+                  ],
+                ],
               ),
             ],
           ),
         ),
         Text(
-          '${rental.totalPrice} ${rental.currency}',
+          '${rental.totalPrice ?? rental.totalPriceUsd ?? 0} ${rental.currency ?? 'MATIC'}',
           style: theme.textTheme.titleMedium?.copyWith(
             fontWeight: FontWeight.bold,
             color: AppColors.primary,
@@ -142,7 +168,7 @@ class RentalCard extends StatelessWidget {
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Text(
-                  asset.title,
+                  asset.title ?? 'Unnamed Asset',
                   style: theme.textTheme.titleSmall?.copyWith(
                     fontWeight: FontWeight.w600,
                   ),
@@ -150,29 +176,21 @@ class RentalCard extends StatelessWidget {
                   overflow: TextOverflow.ellipsis,
                 ),
                 Text(
-                  AssetCategories.getDisplayName(asset.category),
+                  AssetCategories.getDisplayName(asset.category ?? 'other'),
                   style: theme.textTheme.bodySmall?.copyWith(
                     color: AppColors.grey,
                   ),
                 ),
-                if (asset.location != null && asset.location!.isNotEmpty)
+                if (asset.tokenId != null)
                   Row(
                     children: [
-                      Icon(
-                        Icons.location_on_outlined,
-                        size: 12,
-                        color: AppColors.grey,
-                      ),
+                      Icon(Icons.token, size: 12, color: AppColors.secondary),
                       const SizedBox(width: 2),
-                      Expanded(
-                        child: Text(
-                          asset.location!,
+                      Text(
+                        'Token #${asset.tokenId}',
                           style: theme.textTheme.bodySmall?.copyWith(
-                            color: AppColors.grey,
+                          color: AppColors.secondary,
                             fontSize: 11,
-                          ),
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
                         ),
                       ),
                     ],
@@ -191,6 +209,9 @@ class RentalCard extends StatelessWidget {
   }
 
   Widget _buildRentalDetails(ThemeData theme) {
+    final startDate = rental.startDate!;
+    final endDate = rental.endDate!;
+    
     return Padding(
       padding: const EdgeInsets.only(top: AppSpacing.md),
       child: Row(
@@ -199,7 +220,7 @@ class RentalCard extends StatelessWidget {
             child: _buildDetailColumn(
               theme,
               'Start Date',
-              DateFormat('MMM dd').format(rental.startDate),
+              DateFormat('MMM dd').format(startDate),
               Icons.play_circle_outline,
             ),
           ),
@@ -207,7 +228,7 @@ class RentalCard extends StatelessWidget {
             child: _buildDetailColumn(
               theme,
               'End Date',
-              DateFormat('MMM dd').format(rental.endDate),
+              DateFormat('MMM dd').format(endDate),
               Icons.stop_circle_outlined,
             ),
           ),
@@ -215,7 +236,7 @@ class RentalCard extends StatelessWidget {
             child: _buildDetailColumn(
               theme,
               'Duration',
-              '${rental.endDate.difference(rental.startDate).inDays} days',
+              '${endDate.difference(startDate).inDays} days',
               Icons.schedule_outlined,
             ),
           ),
@@ -272,8 +293,9 @@ class RentalCard extends StatelessWidget {
 
   Widget _buildProgressIndicator(ThemeData theme) {
     final now = DateTime.now();
-    final startTime = rental.startDate;
-    final endTime = rental.endDate;
+    final startTime = rental.startDate!;
+    final endTime = rental.endDate!;
+    final createdAt = rental.createdAt ?? startTime.subtract(const Duration(days: 1));
     
     double progress = 0.0;
     String progressText = 'Not started';
@@ -281,16 +303,20 @@ class RentalCard extends StatelessWidget {
     
     if (now.isBefore(startTime)) {
       // Before start
-      final totalWait = startTime.difference(rental.createdAt);
-      final elapsed = now.difference(rental.createdAt);
-      progress = elapsed.inMilliseconds / totalWait.inMilliseconds;
+      final totalWait = startTime.difference(createdAt);
+      final elapsed = now.difference(createdAt);
+      progress = totalWait.inMilliseconds > 0
+          ? elapsed.inMilliseconds / totalWait.inMilliseconds
+          : 0;
       progressText = 'Starting soon';
       progressColor = AppColors.warning;
     } else if (now.isAfter(startTime) && now.isBefore(endTime)) {
       // During rental
       final totalDuration = endTime.difference(startTime);
       final elapsed = now.difference(startTime);
-      progress = elapsed.inMilliseconds / totalDuration.inMilliseconds;
+      progress = totalDuration.inMilliseconds > 0
+          ? elapsed.inMilliseconds / totalDuration.inMilliseconds
+          : 0;
       progressText = 'In progress';
       progressColor = AppColors.primary;
     } else if (now.isAfter(endTime)) {
@@ -336,13 +362,14 @@ class RentalCard extends StatelessWidget {
   }
 
   Widget _buildActionButton(ThemeData theme) {
+    final status = rental.status ?? 'pending';
     String buttonText = 'View';
     IconData buttonIcon = Icons.visibility_outlined;
     VoidCallback? buttonAction = onTap;
     
-    switch (rental.status) {
+    switch (status) {
       case 'pending':
-        if (DateTime.now().isAfter(rental.startDate)) {
+        if (rental.startDate != null && DateTime.now().isAfter(rental.startDate!)) {
           buttonText = 'Start';
           buttonIcon = Icons.play_arrow;
         }
@@ -391,11 +418,3 @@ class RentalCard extends StatelessWidget {
     );
   }
 }
-
-
-
-
-
-
-
-

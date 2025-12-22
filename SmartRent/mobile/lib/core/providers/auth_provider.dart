@@ -1,61 +1,62 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:web3dart/web3dart.dart';
 
 import '../../services/api_service.dart';
-import '../../services/wallet_service_simple.dart';
-import '../../services/models.dart';
+import '../../services/wallet_service.dart';
 
+/// Authentication State (SIWE-based)
 class AuthState {
   final bool isAuthenticated;
-  final AuthProfile? profile;
-  final String? accessToken;
-  final String? refreshToken;
+  final String? walletAddress;
+  final String? jwtToken;
   final bool isLoading;
   final String? error;
   final String? statusMessage;
-  final bool requiresEmailVerification;
+  final String? wcUri; // WalletConnect URI for QR code display
+  final String? balance; // POL/MATIC balance
 
   const AuthState({
     this.isAuthenticated = false,
-    this.profile,
-    this.accessToken,
-    this.refreshToken,
+    this.walletAddress,
+    this.jwtToken,
     this.isLoading = false,
     this.error,
     this.statusMessage,
-    this.requiresEmailVerification = false,
+    this.wcUri,
+    this.balance,
   });
-
-  String? get walletAddress => profile?.walletAddress;
 
   AuthState copyWith({
     bool? isAuthenticated,
-    AuthProfile? profile,
-    bool profileRemoved = false,
-    String? accessToken,
-    String? refreshToken,
+    String? walletAddress,
+    bool walletAddressRemoved = false,
+    String? jwtToken,
+    bool jwtTokenRemoved = false,
     bool? isLoading,
     String? error,
     bool errorRemoved = false,
     String? statusMessage,
     bool statusMessageRemoved = false,
-    bool? requiresEmailVerification,
+    String? wcUri,
+    bool wcUriRemoved = false,
+    String? balance,
+    bool balanceRemoved = false,
   }) {
     return AuthState(
       isAuthenticated: isAuthenticated ?? this.isAuthenticated,
-      profile: profileRemoved ? null : (profile ?? this.profile),
-      accessToken: accessToken ?? this.accessToken,
-      refreshToken: refreshToken ?? this.refreshToken,
+      walletAddress: walletAddressRemoved ? null : (walletAddress ?? this.walletAddress),
+      jwtToken: jwtTokenRemoved ? null : (jwtToken ?? this.jwtToken),
       isLoading: isLoading ?? this.isLoading,
       error: errorRemoved ? null : (error ?? this.error),
       statusMessage: statusMessageRemoved ? null : (statusMessage ?? this.statusMessage),
-      requiresEmailVerification:
-          requiresEmailVerification ?? this.requiresEmailVerification,
+      wcUri: wcUriRemoved ? null : (wcUri ?? this.wcUri),
+      balance: balanceRemoved ? null : (balance ?? this.balance),
     );
   }
 }
 
-// Auth State Notifier
+/// Auth State Notifier (SIWE-based)
 class AuthNotifier extends StateNotifier<AuthState> {
   final ApiService _apiService;
   final WalletService _walletService;
@@ -74,13 +75,41 @@ class AuthNotifier extends StateNotifier<AuthState> {
 
     try {
       await _apiService.initialize();
+      await _walletService.initialize();
       _apiInitialized = true;
-      final session = await _apiService.restoreSession();
-      if (session != null) {
-        _setAuthenticatedSession(session);
-      } else {
-        state = state.copyWith(isLoading: false);
+
+      // Try to restore wallet session (auto-reconnect)
+      if (_walletService.isConnected()) {
+        final address = _walletService.getAddress();
+        if (address != null) {
+          // Check if JWT is still valid
+          try {
+            final userData = await _apiService.getMe();
+            final authenticatedAddress = userData['address'] as String?;
+            
+            // Verify that JWT matches wallet address
+            if (authenticatedAddress?.toLowerCase() == address.toLowerCase()) {
+              // Valid session - restore auth state
+              state = state.copyWith(
+                isAuthenticated: true,
+                walletAddress: address,
+                isLoading: false,
+                statusMessage: 'Wallet session restored',
+              );
+              
+              // Fetch balance in the background
+              _fetchBalance();
+              return;
+            }
+          } catch (_) {
+            // JWT expired or invalid - will need to re-authenticate
+            await _apiService.clearSession();
+          }
+        }
       }
+
+      // No valid session found
+      state = state.copyWith(isLoading: false);
     } catch (e) {
       state = state.copyWith(
         isLoading: false,
@@ -89,138 +118,80 @@ class AuthNotifier extends StateNotifier<AuthState> {
     }
   }
 
-  void _setAuthenticatedSession(AuthSession session) {
-    state = state.copyWith(
-      isAuthenticated: true,
-      profile: session.profile ?? state.profile,
-      accessToken: session.accessToken,
-      refreshToken: session.refreshToken,
-      isLoading: false,
-      requiresEmailVerification: false,
-      errorRemoved: true,
-      statusMessageRemoved: true,
-    );
-  }
-
   Future<void> _ensureInitialized() async {
     if (_apiInitialized) return;
     await _initializeAuth();
   }
 
-  Future<bool> loginWithCredentials(String email, String password) async {
+  /// Connect wallet and authenticate via SIWE
+  Future<bool> connectWalletAndAuthenticate() async {
     await _ensureInitialized();
     state = state.copyWith(
       isLoading: true,
       errorRemoved: true,
       statusMessageRemoved: true,
+      wcUriRemoved: true,
     );
 
     try {
-      final session = await _apiService.loginWithEmail(
-        email: email,
-        password: password,
-      );
-      _setAuthenticatedSession(session);
-      return true;
-    } catch (e) {
-      final message = e is ApiException ? e.message : e.toString();
-      state = state.copyWith(
-        isLoading: false,
-        error: message,
-        isAuthenticated: false,
-        accessToken: null,
-        refreshToken: null,
-      );
-      return false;
-    }
-  }
-
-  Future<bool> connectWallet() async {
-    await _ensureInitialized();
-    state = state.copyWith(
-      isLoading: true,
-      errorRemoved: true,
-      statusMessageRemoved: true,
-    );
-
-    try {
-      final session = await _walletService.connect();
+      // Step 1: Connect wallet via WalletConnect
+      state = state.copyWith(statusMessage: 'Connecting to wallet...');
+      
+      // Start the connection (this generates the wcUri)
+      final connectFuture = _walletService.connect();
+      
+      // Give it a moment to generate the URI
+      await Future.delayed(const Duration(milliseconds: 300));
+      
+      // Get the wcUri for QR code display
+      final wcUri = _walletService.getLatestWcUri();
+      if (wcUri != null && wcUri.isNotEmpty) {
+        state = state.copyWith(
+          wcUri: wcUri,
+          statusMessage: 'Scan QR code or approve in your wallet...',
+        );
+      }
+      
+      // Wait for wallet approval
+      final session = await connectFuture;
       if (session == null) {
         throw Exception('Failed to connect wallet');
       }
 
       final walletAddress = session.accounts.first;
+
+      // Step 2: Get nonce from backend
+      state = state.copyWith(statusMessage: 'Requesting authentication challenge...');
+      final nonceData = await _apiService.getNonce(walletAddress);
+      final message = nonceData['message'] as String;
+
+      // Step 3: Sign message with wallet
+      state = state.copyWith(statusMessage: 'Please sign the message in your wallet...');
+      final signature = await _walletService.signMessage(message);
+
+      // Step 4: Verify signature and get JWT
+      state = state.copyWith(statusMessage: 'Verifying signature...');
+      final authData = await _apiService.verifySignature(
+        message: message,
+        signature: signature,
+        address: walletAddress,
+      );
+
+      // Step 5: Save wallet address
       final prefs = await SharedPreferences.getInstance();
       await prefs.setString('wallet_address', walletAddress);
 
-      User? user;
-      try {
-        user = await _apiService.getUserByWallet(walletAddress);
-      } catch (_) {
-        user = await _apiService.createUser(
-          CreateUserRequest(
-            walletAddress: walletAddress,
-            displayName: 'User ${walletAddress.substring(0, 6)}',
-          ),
-        );
-      }
-
-      final profile = AuthProfile(
-        id: user.id.toString(),
-        email: user.email,
-        fullName: user.displayName,
-        walletAddress: user.walletAddress,
-        createdAt: user.createdAt,
-        updatedAt: user.updatedAt,
-      );
-
       state = state.copyWith(
         isAuthenticated: true,
-        profile: profile,
-        isLoading: false,
-        statusMessage: 'Wallet connected successfully.',
-      );
-
-      return true;
-    } catch (e) {
-      final message = e is ApiException ? e.message : e.toString();
-      state = state.copyWith(
-        isLoading: false,
-        error: message,
-      );
-      return false;
-    }
-  }
-
-  Future<bool> register(
-    String email,
-    String password,
-    String displayName, {
-    String? walletAddress,
-    String? avatarUrl,
-  }) async {
-    await _ensureInitialized();
-    state = state.copyWith(
-      isLoading: true,
-      errorRemoved: true,
-      statusMessageRemoved: true,
-    );
-
-    try {
-      final response = await _apiService.signup(
-        email: email,
-        password: password,
-        fullName: displayName,
         walletAddress: walletAddress,
-        avatarUrl: avatarUrl,
+        jwtToken: authData['access_token'] as String?,
+        isLoading: false,
+        statusMessage: 'Authentication successful!',
+        wcUriRemoved: true, // Clear QR code after successful auth
       );
 
-      state = state.copyWith(
-        isLoading: false,
-        requiresEmailVerification: response.requiresEmailVerification,
-        statusMessage:
-            'Account created. Please check your email to verify before signing in.',
-      );
+      // Fetch balance in the background
+      _fetchBalance();
 
       return true;
     } catch (e) {
@@ -228,11 +199,13 @@ class AuthNotifier extends StateNotifier<AuthState> {
       state = state.copyWith(
         isLoading: false,
         error: message,
+        wcUriRemoved: true, // Clear QR code on error
       );
       return false;
     }
   }
 
+  /// Logout (disconnect wallet and clear JWT)
   Future<void> logout() async {
     await _ensureInitialized();
     state = state.copyWith(
@@ -240,154 +213,24 @@ class AuthNotifier extends StateNotifier<AuthState> {
       errorRemoved: true,
       statusMessageRemoved: true,
     );
+    
     try {
+      // Disconnect wallet
+      await _walletService.disconnect();
+      
+      // Clear JWT from backend
+      await _apiService.logout();
+      
+      // Clear local storage
       final prefs = await SharedPreferences.getInstance();
       await prefs.remove('wallet_address');
-      // Try to logout from backend, but don't fail if it errors
-      // Session will be cleared locally regardless
-      try {
-        await _apiService.logout(refreshToken: state.refreshToken);
-      } catch (e) {
-        // Log but don't fail - session will be cleared anyway
-        // This handles network errors gracefully
-      }
-      // Always clear state and show success
+      
       state = const AuthState(
         statusMessage: 'Logged out successfully',
       );
     } catch (e) {
       // Even if something goes wrong, clear the state
       state = const AuthState();
-    }
-  }
-
-  Future<void> refreshSession() async {
-    await _ensureInitialized();
-    try {
-      final session = await _apiService.refreshSession();
-      _setAuthenticatedSession(session);
-    } catch (e) {
-      final message = e is ApiException ? e.message : e.toString();
-      state = state.copyWith(
-        error: message,
-        isAuthenticated: false,
-        accessToken: null,
-        refreshToken: null,
-      );
-    }
-  }
-
-  Future<void> sendMagicLink(String email) async {
-    await _ensureInitialized();
-    state = state.copyWith(
-      isLoading: true,
-      errorRemoved: true,
-      statusMessageRemoved: true,
-    );
-
-    try {
-      await _apiService.sendMagicLink(email);
-      state = state.copyWith(
-        isLoading: false,
-        statusMessage:
-            'Magic link sent. Please check your email to continue.',
-      );
-    } catch (e) {
-      final message = e is ApiException ? e.message : e.toString();
-      state = state.copyWith(isLoading: false, error: message);
-    }
-  }
-
-  Future<void> requestPasswordReset(String email) async {
-    await _ensureInitialized();
-    state = state.copyWith(
-      isLoading: true,
-      errorRemoved: true,
-      statusMessageRemoved: true,
-    );
-
-    try {
-      await _apiService.requestPasswordReset(email);
-      state = state.copyWith(
-        isLoading: false,
-        statusMessage:
-            'Password reset email sent. Follow the instructions in your inbox.',
-      );
-    } catch (e) {
-      final message = e is ApiException ? e.message : e.toString();
-      state = state.copyWith(isLoading: false, error: message);
-    }
-  }
-
-  Future<void> confirmPasswordReset({
-    required String accessToken,
-    required String newPassword,
-  }) async {
-    await _ensureInitialized();
-    state = state.copyWith(
-      isLoading: true,
-      errorRemoved: true,
-      statusMessageRemoved: true,
-    );
-
-    try {
-      await _apiService.confirmPasswordReset(
-        accessToken: accessToken,
-        newPassword: newPassword,
-      );
-      state = state.copyWith(
-        isLoading: false,
-        statusMessage: 'Password updated successfully. You can now sign in.',
-      );
-    } catch (e) {
-      final message = e is ApiException ? e.message : e.toString();
-      state = state.copyWith(isLoading: false, error: message);
-    }
-  }
-
-  Future<bool> updateProfile(Map<String, dynamic> updates) async {
-    await _ensureInitialized();
-    state = state.copyWith(
-      isLoading: true,
-      errorRemoved: true,
-      statusMessageRemoved: true,
-    );
-
-    try {
-      final profile = state.profile;
-      if (profile == null) {
-        throw Exception('No user profile available');
-      }
-
-      // TODO: Replace with real profile update endpoint
-      await Future.delayed(const Duration(milliseconds: 300));
-
-      final updatedProfile = AuthProfile(
-        id: profile.id,
-        email: updates['email'] as String? ?? profile.email,
-        fullName: updates['full_name'] as String? ?? profile.fullName,
-        walletAddress: updates['wallet_address'] as String? ?? profile.walletAddress,
-        avatarUrl: updates['avatar_url'] as String? ?? profile.avatarUrl,
-        isOnboarded: updates['is_onboarded'] as bool? ?? profile.isOnboarded,
-        createdAt: profile.createdAt,
-        updatedAt: DateTime.now(),
-        lastLoginAt: profile.lastLoginAt,
-      );
-
-      state = state.copyWith(
-        profile: updatedProfile,
-        isLoading: false,
-        statusMessage: 'Profile updated.',
-      );
-
-      return true;
-    } catch (e) {
-      final message = e is ApiException ? e.message : e.toString();
-      state = state.copyWith(
-        isLoading: false,
-        error: message,
-      );
-      return false;
     }
   }
 
@@ -398,16 +241,33 @@ class AuthNotifier extends StateNotifier<AuthState> {
   void clearErrorMessage() {
     state = state.copyWith(errorRemoved: true);
   }
+
+  /// Fetch POL/MATIC balance from blockchain
+  Future<void> _fetchBalance() async {
+    try {
+      if (state.walletAddress == null) return;
+      
+      // Get balance using WalletService
+      final balanceWei = await _walletService.getBalance();
+      final balanceEth = balanceWei.getValueInUnit(EtherUnit.ether).toStringAsFixed(4);
+      
+      state = state.copyWith(balance: balanceEth);
+    } catch (e) {
+      // Silent fail - balance is optional
+      print('Failed to fetch balance: $e');
+    }
+  }
+
+  /// Refresh balance manually
+  Future<void> refreshBalance() async {
+    await _fetchBalance();
+  }
 }
 
 final authStateProvider = StateNotifierProvider<AuthNotifier, AuthState>((ref) {
   final apiService = ApiService();
   final walletService = WalletService();
   return AuthNotifier(apiService, walletService);
-});
-
-final currentProfileProvider = Provider<AuthProfile?>((ref) {
-  return ref.watch(authStateProvider).profile;
 });
 
 final walletAddressProvider = Provider<String?>((ref) {

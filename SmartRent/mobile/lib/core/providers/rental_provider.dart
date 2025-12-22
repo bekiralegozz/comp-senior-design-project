@@ -1,6 +1,16 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import '../../services/api_service.dart';
 import '../../services/models.dart';
+import '../../services/blockchain_service.dart';
+import 'auth_provider.dart'; // For walletAddressProvider
+import 'wallet_provider.dart'; // For blockchainServiceProvider
+
+/// ==========================================================
+/// RENTAL PROVIDER - BLOCKCHAIN MIGRATION VERSION
+/// ==========================================================
+///
+/// This provider is transitioning from database to blockchain.
+/// Rentals will be managed through smart contracts.
+/// Currently shows placeholder data.
 
 // Rental List State
 class RentalListState {
@@ -14,7 +24,7 @@ class RentalListState {
     this.rentals = const [],
     this.isLoading = false,
     this.error,
-    this.hasMore = true,
+    this.hasMore = false,
     this.currentPage = 0,
   });
 
@@ -35,59 +45,44 @@ class RentalListState {
   }
 }
 
-// Rental List Notifier
+// Rental List Notifier - Blockchain version (placeholder)
 class RentalListNotifier extends StateNotifier<RentalListState> {
-  final ApiService _apiService;
+  final BlockchainService _blockchainService;
+  final String? walletAddress;
   final String? statusFilter;
-  final int? renterId;
-  final int? assetId;
+  final String? assetId;
 
   RentalListNotifier(
-    this._apiService, {
+    this._blockchainService, {
+    this.walletAddress,
     this.statusFilter,
-    this.renterId,
     this.assetId,
   }) : super(const RentalListState()) {
     loadRentals();
   }
 
   Future<void> loadRentals({bool refresh = false}) async {
-    if (state.isLoading) return;
+    if (state.isLoading && !refresh) return;
 
-    if (refresh) {
-      state = const RentalListState(isLoading: true);
-    } else {
-      state = state.copyWith(isLoading: true, error: null);
-    }
+    state = state.copyWith(isLoading: true, error: null);
 
     try {
-      final rentals = await _apiService.getRentals(
-        skip: refresh ? 0 : state.currentPage * 20,
-        limit: 20,
-        status: statusFilter,
-        renterId: renterId,
-        assetId: assetId,
+      // TODO: Fetch rentals from RentalManager smart contract
+      // For now, return empty list - blockchain integration pending
+      
+      await Future.delayed(const Duration(milliseconds: 500)); // Simulate network
+      
+      state = RentalListState(
+        rentals: [],
+        isLoading: false,
+        hasMore: false,
+        currentPage: 1,
+        error: null,
       );
-
-      if (refresh) {
-        state = RentalListState(
-          rentals: rentals,
-          isLoading: false,
-          hasMore: rentals.length >= 20,
-          currentPage: 1,
-        );
-      } else {
-        state = state.copyWith(
-          rentals: [...state.rentals, ...rentals],
-          isLoading: false,
-          hasMore: rentals.length >= 20,
-          currentPage: state.currentPage + 1,
-        );
-      }
     } catch (e) {
       state = state.copyWith(
         isLoading: false,
-        error: e.toString(),
+        error: 'Failed to load rentals from blockchain: $e',
       );
     }
   }
@@ -126,10 +121,10 @@ class RentalDetailState {
 
 // Rental Detail Notifier
 class RentalDetailNotifier extends StateNotifier<RentalDetailState> {
-  final ApiService _apiService;
-  final int rentalId;
+  final BlockchainService _blockchainService;
+  final String rentalId;
 
-  RentalDetailNotifier(this._apiService, this.rentalId) : super(const RentalDetailState()) {
+  RentalDetailNotifier(this._blockchainService, this.rentalId) : super(const RentalDetailState()) {
     loadRental();
   }
 
@@ -137,52 +132,33 @@ class RentalDetailNotifier extends StateNotifier<RentalDetailState> {
     state = state.copyWith(isLoading: true, error: null);
 
     try {
-      final rental = await _apiService.getRental(rentalId);
-      state = state.copyWith(rental: rental, isLoading: false);
+      // TODO: Fetch rental from blockchain
+      await Future.delayed(const Duration(milliseconds: 500));
+      
+      state = state.copyWith(
+        isLoading: false,
+        error: 'Rental details from blockchain coming soon',
+      );
     } catch (e) {
       state = state.copyWith(isLoading: false, error: e.toString());
     }
   }
 
-  Future<bool> activateRental() async {
+  Future<bool> payRent(String amount, List<String> owners) async {
     if (state.rental == null) return false;
 
     state = state.copyWith(isUpdating: true, error: null);
 
     try {
-      final updatedRental = await _apiService.activateRental(rentalId);
-      state = state.copyWith(rental: updatedRental, isUpdating: false);
-      return true;
-    } catch (e) {
-      state = state.copyWith(isUpdating: false, error: e.toString());
-      return false;
-    }
-  }
+      // Pay rent via blockchain
+      final txHash = await _blockchainService.payRent(
+        assetId: int.parse(state.rental!.assetId ?? '0'),
+        amount: amount,
+        owners: owners,
+      );
 
-  Future<bool> completeRental() async {
-    if (state.rental == null) return false;
-
-    state = state.copyWith(isUpdating: true, error: null);
-
-    try {
-      final updatedRental = await _apiService.completeRental(rentalId);
-      state = state.copyWith(rental: updatedRental, isUpdating: false);
-      return true;
-    } catch (e) {
-      state = state.copyWith(isUpdating: false, error: e.toString());
-      return false;
-    }
-  }
-
-  Future<bool> cancelRental() async {
-    if (state.rental == null) return false;
-
-    state = state.copyWith(isUpdating: true, error: null);
-
-    try {
-      final updatedRental = await _apiService.cancelRental(rentalId);
-      state = state.copyWith(rental: updatedRental, isUpdating: false);
-      return true;
+      state = state.copyWith(isUpdating: false);
+      return txHash.isNotEmpty;
     } catch (e) {
       state = state.copyWith(isUpdating: false, error: e.toString());
       return false;
@@ -193,29 +169,29 @@ class RentalDetailNotifier extends StateNotifier<RentalDetailState> {
 // Providers
 final rentalListProvider = StateNotifierProvider.autoDispose<RentalListNotifier, RentalListState>(
   (ref) {
-    final apiService = ApiService();
-    return RentalListNotifier(apiService);
+    final blockchainService = ref.watch(blockchainServiceProvider);
+    return RentalListNotifier(blockchainService);
   },
 );
 
 final myRentalsProvider = StateNotifierProvider.autoDispose<RentalListNotifier, RentalListState>(
   (ref) {
-    final apiService = ApiService();
-    // TODO: Get current user ID from auth provider
-    return RentalListNotifier(apiService, renterId: 1);
+    final blockchainService = ref.watch(blockchainServiceProvider);
+    final walletAddress = ref.watch(walletAddressProvider);
+    return RentalListNotifier(blockchainService, walletAddress: walletAddress);
   },
 );
 
-final rentalDetailProvider = StateNotifierProvider.family<RentalDetailNotifier, RentalDetailState, int>(
+final rentalDetailProvider = StateNotifierProvider.family<RentalDetailNotifier, RentalDetailState, String>(
   (ref, rentalId) {
-    final apiService = ApiService();
-    return RentalDetailNotifier(apiService, rentalId);
+    final blockchainService = ref.watch(blockchainServiceProvider);
+    return RentalDetailNotifier(blockchainService, rentalId);
   },
 );
 
 final activeRentalsProvider = StateNotifierProvider.autoDispose<RentalListNotifier, RentalListState>(
   (ref) {
-    final apiService = ApiService();
-    return RentalListNotifier(apiService, statusFilter: 'active');
+    final blockchainService = ref.watch(blockchainServiceProvider);
+    return RentalListNotifier(blockchainService, statusFilter: 'active');
   },
 );

@@ -1,5 +1,7 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import '../../services/wallet_service_simple.dart';
+import 'package:web3dart/web3dart.dart';
+import '../../services/wallet_service.dart';
+import '../../services/blockchain_service.dart';
 
 // Wallet State
 class WalletState {
@@ -9,6 +11,7 @@ class WalletState {
   final String? chainId;
   final bool isLoading;
   final String? error;
+  final String? wcUri; // WalletConnect URI for QR code
 
   const WalletState({
     this.isConnected = false,
@@ -17,6 +20,7 @@ class WalletState {
     this.chainId,
     this.isLoading = false,
     this.error,
+    this.wcUri,
   });
 
   WalletState copyWith({
@@ -26,6 +30,8 @@ class WalletState {
     String? chainId,
     bool? isLoading,
     String? error,
+    String? wcUri,
+    bool clearWcUri = false,
   }) {
     return WalletState(
       isConnected: isConnected ?? this.isConnected,
@@ -34,6 +40,7 @@ class WalletState {
       chainId: chainId ?? this.chainId,
       isLoading: isLoading ?? this.isLoading,
       error: error,
+      wcUri: clearWcUri ? null : (wcUri ?? this.wcUri),
     );
   }
 }
@@ -47,26 +54,27 @@ class WalletNotifier extends StateNotifier<WalletState> {
   }
 
   Future<void> _initialize() async {
+    await _walletService.initialize();
+    
     // Check if wallet is already connected
-    final isConnected = await _walletService.isConnected();
-    if (isConnected) {
+    if (_walletService.isConnected()) {
       await _loadWalletInfo();
     }
   }
 
   Future<void> _loadWalletInfo() async {
     try {
-      final session = _walletService.currentSession;
-      if (session != null) {
-        final address = session.address;
-        // Mock balance for demo
-        final balance = '1.5';
+      final address = _walletService.getAddress();
+      if (address != null) {
+        // Get balance from blockchain
+        final balanceWei = await _walletService.getBalance();
+        final balanceEth = balanceWei.getValueInUnit(EtherUnit.ether).toStringAsFixed(4);
         
         state = state.copyWith(
           isConnected: true,
           address: address,
-          balance: balance,
-          chainId: session.chainId,
+          balance: balanceEth,
+          chainId: '11155111', // Sepolia
         );
       }
     } catch (e) {
@@ -78,8 +86,30 @@ class WalletNotifier extends StateNotifier<WalletState> {
     state = state.copyWith(isLoading: true, error: null);
 
     try {
-      final session = await _walletService.connect();
+      // Start connection (this will generate wcUri immediately)
+      final connectFuture = _walletService.connect();
+      
+      // Give it a moment to generate URI in WalletService
+      await Future.delayed(const Duration(milliseconds: 300));
+      
+      // Get wcUri from service (set immediately after connect starts)
+      final wcUri = _walletService.getLatestWcUri();
+      print('🔍 DEBUG: Got wcUri from service: ${wcUri?.substring(0, 20)}...');
+      
+      if (wcUri != null && wcUri.isNotEmpty) {
+        state = state.copyWith(wcUri: wcUri);
+        print('✅ DEBUG: Set wcUri to state');
+      } else {
+        print('❌ DEBUG: wcUri is null or empty');
+      }
+      
+      // Complete the connection (this waits for user approval)
+      final session = await connectFuture;
+      
       if (session != null) {
+        state = state.copyWith(
+          isLoading: false,
+        );
         await _loadWalletInfo();
         return true;
       }
@@ -97,6 +127,11 @@ class WalletNotifier extends StateNotifier<WalletState> {
       return false;
     }
   }
+  
+  /// Get the current WalletConnect URI for QR code display
+  String? getWcUri() {
+    return state.wcUri;
+  }
 
   Future<void> disconnect() async {
     try {
@@ -111,9 +146,9 @@ class WalletNotifier extends StateNotifier<WalletState> {
     if (state.address == null) return;
 
     try {
-      // Mock balance refresh
-      final balance = '1.5';
-      state = state.copyWith(balance: balance);
+      final balanceWei = await _walletService.getBalance();
+      final balanceEth = balanceWei.getValueInUnit(EtherUnit.ether).toStringAsFixed(4);
+      state = state.copyWith(balance: balanceEth);
     } catch (e) {
       state = state.copyWith(error: e.toString());
     }
@@ -154,14 +189,21 @@ enum TransactionStatus {
 }
 
 // Providers
+final walletServiceProvider = Provider<WalletService>((ref) {
+  return WalletService();
+});
+
+final blockchainServiceProvider = Provider<BlockchainService>((ref) {
+  return BlockchainService();
+});
+
 final walletProvider = StateNotifierProvider<WalletNotifier, WalletState>((ref) {
-  final walletService = WalletService();
+  final walletService = ref.watch(walletServiceProvider);
   return WalletNotifier(walletService);
 });
 
-final walletAddressProvider = Provider<String?>((ref) {
-  return ref.watch(walletProvider).address;
-});
+// Note: walletAddressProvider is defined in auth_provider.dart
+// Use authStateProvider.walletAddress or walletAddressProvider from auth_provider
 
 final walletBalanceProvider = Provider<String?>((ref) {
   return ref.watch(walletProvider).balance;

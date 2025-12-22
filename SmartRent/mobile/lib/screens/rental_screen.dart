@@ -5,27 +5,20 @@ import 'package:intl/intl.dart';
 
 import '../constants/config.dart';
 import '../services/models.dart';
-import '../services/api_service.dart';
 import '../components/rental_card.dart';
+import '../core/providers/auth_provider.dart';
+import '../core/providers/rental_provider.dart';
+import '../core/providers/wallet_provider.dart';
 
-/// Provider for user rentals
-final userRentalsProvider = FutureProvider.family<List<Rental>, int?>((ref, userId) async {
-  final apiService = ApiService();
-  if (userId != null) {
-    return await apiService.getRentalsByUser(userId);
-  } else {
-    return await apiService.getRentals(limit: 50);
-  }
-});
-
-/// Provider for rental details
-final rentalDetailsProvider = FutureProvider.family<Rental, int>((ref, rentalId) async {
-  final apiService = ApiService();
-  return await apiService.getRental(rentalId);
-});
+/// ==========================================================
+/// RENTAL SCREEN - BLOCKCHAIN MIGRATION VERSION
+/// ==========================================================
+///
+/// Uses blockchain-based providers for rental data.
+/// Rentals will be fetched from smart contracts.
 
 class RentalScreen extends ConsumerStatefulWidget {
-  final int? rentalId;
+  final String? rentalId;
 
   const RentalScreen({Key? key, this.rentalId}) : super(key: key);
 
@@ -36,7 +29,6 @@ class RentalScreen extends ConsumerStatefulWidget {
 class _RentalScreenState extends ConsumerState<RentalScreen>
     with SingleTickerProviderStateMixin {
   late TabController _tabController;
-  String _selectedStatus = '';
 
   @override
   void initState() {
@@ -54,7 +46,7 @@ class _RentalScreenState extends ConsumerState<RentalScreen>
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
 
-    // If rentalId is provided, show rental details instead of list
+    // If rentalId is provided, show rental details
     if (widget.rentalId != null) {
       return _buildRentalDetails(context, theme);
     }
@@ -83,7 +75,6 @@ class _RentalScreenState extends ConsumerState<RentalScreen>
       ),
       floatingActionButton: FloatingActionButton(
         onPressed: () {
-          // TODO: Navigate to browse assets or create rental
           ScaffoldMessenger.of(context).showSnackBar(
             const SnackBar(content: Text('Browse assets to create new rental!')),
           );
@@ -95,7 +86,7 @@ class _RentalScreenState extends ConsumerState<RentalScreen>
   }
 
   Widget _buildRentalDetails(BuildContext context, ThemeData theme) {
-    final rentalDetails = ref.watch(rentalDetailsProvider(widget.rentalId!));
+    final rentalState = ref.watch(rentalDetailProvider(widget.rentalId!));
 
     return Scaffold(
       appBar: AppBar(
@@ -104,7 +95,6 @@ class _RentalScreenState extends ConsumerState<RentalScreen>
           IconButton(
             icon: const Icon(Icons.share),
             onPressed: () {
-              // TODO: Share rental details
               ScaffoldMessenger.of(context).showSnackBar(
                 const SnackBar(content: Text('Share feature coming soon!')),
               );
@@ -112,83 +102,74 @@ class _RentalScreenState extends ConsumerState<RentalScreen>
           ),
         ],
       ),
-      body: rentalDetails.when(
-        data: (rental) => _buildRentalDetailsContent(context, theme, rental),
-        loading: () => const Center(child: CircularProgressIndicator()),
-        error: (error, stack) => Center(
+      body: Builder(
+        builder: (context) {
+          if (rentalState.isLoading) {
+            return const Center(child: CircularProgressIndicator());
+          }
+          
+          if (rentalState.error != null) {
+            return Center(
           child: Column(
             mainAxisAlignment: MainAxisAlignment.center,
             children: [
-              Icon(
-                Icons.error_outline,
-                size: 64,
-                color: AppColors.error,
-              ),
+                  Icon(Icons.error_outline, size: 64, color: AppColors.error),
               const SizedBox(height: AppSpacing.md),
-              Text('Failed to load rental details'),
+                  Text(rentalState.error!),
               const SizedBox(height: AppSpacing.sm),
               ElevatedButton(
-                onPressed: () => ref.invalidate(rentalDetailsProvider(widget.rentalId!)),
+                    onPressed: () => ref.invalidate(rentalDetailProvider(widget.rentalId!)),
                 child: const Text('Retry'),
               ),
             ],
           ),
-        ),
+            );
+          }
+          
+          if (rentalState.rental != null) {
+            return _buildRentalDetailsContent(context, theme, rentalState.rental!);
+          }
+          
+          return _buildComingSoonPlaceholder(theme);
+        },
       ),
     );
   }
 
   Widget _buildRentalsList(String statusFilter) {
-    // TODO: In a real app, you'd get the current user ID from authentication
-    const currentUserId = 1; // Placeholder
-    
-    final rentals = ref.watch(userRentalsProvider(currentUserId));
+    final rentalsState = ref.watch(myRentalsProvider);
 
     return RefreshIndicator(
       onRefresh: () async {
-        ref.invalidate(userRentalsProvider(currentUserId));
+        ref.invalidate(myRentalsProvider);
       },
-      child: rentals.when(
-        data: (data) {
-          final filteredRentals = statusFilter.isEmpty
-              ? data
-              : data.where((rental) => rental.status == statusFilter).toList();
-
-          if (filteredRentals.isEmpty) {
+      child: Builder(
+        builder: (context) {
+          if (rentalsState.isLoading) {
+            return const Center(child: CircularProgressIndicator());
+          }
+          
+          if (rentalsState.error != null) {
             return Center(
               child: Column(
                 mainAxisAlignment: MainAxisAlignment.center,
                 children: [
-                  Icon(
-                    Icons.receipt_long_outlined,
-                    size: 64,
-                    color: AppColors.grey,
-                  ),
-                  const SizedBox(height: AppSpacing.md),
-                  Text(
-                    statusFilter.isEmpty
-                        ? 'No rentals yet'
-                        : 'No ${statusFilter} rentals',
-                    style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                      color: AppColors.grey,
-                    ),
-                  ),
-                  const SizedBox(height: AppSpacing.sm),
-                  Text(
-                    'Start exploring assets to create your first rental',
-                    style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                      color: AppColors.grey,
-                    ),
-                    textAlign: TextAlign.center,
-                  ),
-                  const SizedBox(height: AppSpacing.lg),
+                  Text('Error: ${rentalsState.error}'),
                   ElevatedButton(
-                    onPressed: () => context.go('/'),
-                    child: const Text('Browse Assets'),
+                    onPressed: () => ref.invalidate(myRentalsProvider),
+                    child: const Text('Retry'),
                   ),
                 ],
               ),
             );
+          }
+          
+          final filteredRentals = statusFilter.isEmpty
+              ? rentalsState.rentals
+              : rentalsState.rentals.where((rental) => rental.status == statusFilter).toList();
+
+          if (filteredRentals.isEmpty) {
+            return _buildEmptyRentalsPlaceholder(statusFilter);
           }
 
           return ListView.builder(
@@ -206,19 +187,63 @@ class _RentalScreenState extends ConsumerState<RentalScreen>
             },
           );
         },
-        loading: () => const Center(child: CircularProgressIndicator()),
-        error: (error, stack) => Center(
+      ),
+    );
+  }
+
+  Widget _buildEmptyRentalsPlaceholder(String statusFilter) {
+    return Center(
           child: Column(
             mainAxisAlignment: MainAxisAlignment.center,
             children: [
-              Text('Error loading rentals: $error'),
+          Icon(Icons.receipt_long_outlined, size: 64, color: AppColors.grey),
+          const SizedBox(height: AppSpacing.md),
+          Text(
+            statusFilter.isEmpty ? 'No Rentals Yet' : 'No ${statusFilter} rentals',
+            style: Theme.of(context).textTheme.titleMedium?.copyWith(
+              color: AppColors.grey,
+            ),
+          ),
+          const SizedBox(height: AppSpacing.sm),
+          Text(
+            'Rentals from blockchain will appear here.\nStart exploring assets to create your first rental!',
+            style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+              color: AppColors.grey,
+            ),
+            textAlign: TextAlign.center,
+          ),
+          const SizedBox(height: AppSpacing.lg),
               ElevatedButton(
-                onPressed: () => ref.invalidate(userRentalsProvider(currentUserId)),
-                child: const Text('Retry'),
-              ),
-            ],
+            onPressed: () => context.go('/'),
+            child: const Text('Browse Assets'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildComingSoonPlaceholder(ThemeData theme) {
+    return Center(
+      child: Column(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          Icon(Icons.construction, size: 64, color: AppColors.warning),
+          const SizedBox(height: AppSpacing.md),
+          Text(
+            'Blockchain Rentals Coming Soon',
+            style: theme.textTheme.titleLarge?.copyWith(
+              fontWeight: FontWeight.bold,
+            ),
+          ),
+          const SizedBox(height: AppSpacing.sm),
+          Text(
+            'Rental details will be fetched from\nthe RentalManager smart contract.',
+            textAlign: TextAlign.center,
+            style: theme.textTheme.bodyMedium?.copyWith(
+              color: AppColors.grey,
           ),
         ),
+        ],
       ),
     );
   }
@@ -266,16 +291,44 @@ class _RentalScreenState extends ConsumerState<RentalScreen>
           Icon(statusIcon, color: statusColor, size: 48),
           const SizedBox(height: AppSpacing.sm),
           Text(
-            RentalStatus.getDisplayName(rental.status),
+            RentalStatus.getDisplayName(rental.status ?? 'unknown'),
             style: theme.textTheme.titleLarge?.copyWith(
               fontWeight: FontWeight.bold,
               color: statusColor,
             ),
           ),
           Text(
-            'Rental #${rental.id}',
+            'Rental #${rental.id.substring(0, 8)}',
             style: theme.textTheme.bodyMedium?.copyWith(
               color: AppColors.grey,
+            ),
+          ),
+          if (rental.txHash != null)
+            Padding(
+              padding: const EdgeInsets.only(top: AppSpacing.sm),
+              child: Container(
+                padding: const EdgeInsets.symmetric(
+                  horizontal: AppSpacing.sm,
+                  vertical: AppSpacing.xs,
+                ),
+                decoration: BoxDecoration(
+                  color: AppColors.success.withOpacity(0.1),
+                  borderRadius: BorderRadius.circular(AppRadius.sm),
+                ),
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Icon(Icons.check_circle, size: 14, color: AppColors.success),
+                    const SizedBox(width: AppSpacing.xs),
+                    Text(
+                      'On Blockchain',
+                      style: theme.textTheme.bodySmall?.copyWith(
+                        color: AppColors.success,
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+                  ],
+                ),
             ),
           ),
         ],
@@ -332,20 +385,13 @@ class _RentalScreenState extends ConsumerState<RentalScreen>
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       Text(
-                        asset.title,
+                        asset.title ?? 'Unnamed Asset',
                         style: theme.textTheme.titleMedium?.copyWith(
                           fontWeight: FontWeight.w600,
                         ),
                       ),
                       Text(
-                        AssetCategories.getDisplayName(asset.category),
-                        style: theme.textTheme.bodySmall?.copyWith(
-                          color: AppColors.grey,
-                        ),
-                      ),
-                      if (asset.location != null)
-                        Text(
-                          asset.location!,
+                        AssetCategories.getDisplayName(asset.category ?? 'other'),
                           style: theme.textTheme.bodySmall?.copyWith(
                             color: AppColors.grey,
                           ),
@@ -353,11 +399,7 @@ class _RentalScreenState extends ConsumerState<RentalScreen>
                     ],
                   ),
                 ),
-                Icon(
-                  Icons.arrow_forward_ios,
-                  size: 16,
-                  color: AppColors.grey,
-                ),
+                Icon(Icons.arrow_forward_ios, size: 16, color: AppColors.grey),
               ],
             ),
           ),
@@ -378,25 +420,7 @@ class _RentalScreenState extends ConsumerState<RentalScreen>
           ),
         ),
         const SizedBox(height: AppSpacing.md),
-        _buildInfoCard(
-          theme,
-          [
-            _buildInfoRow('Start Date', DateFormat('MMM dd, yyyy').format(rental.startDate)),
-            _buildInfoRow('End Date', DateFormat('MMM dd, yyyy').format(rental.endDate)),
-            _buildInfoRow('Duration', '${rental.endDate.difference(rental.startDate).inDays} days'),
-            _buildInfoRow('Total Price', '${rental.totalPrice} ${rental.currency}'),
-            _buildInfoRow('Security Deposit', '${rental.securityDeposit} ${rental.currency}'),
-            if (rental.transactionHash != null)
-              _buildInfoRow('Transaction', rental.transactionHash!, isHash: true),
-          ],
-        ),
-        const SizedBox(height: AppSpacing.lg),
-      ],
-    );
-  }
-
-  Widget _buildInfoCard(ThemeData theme, List<Widget> children) {
-    return Container(
+        Container(
       padding: const EdgeInsets.all(AppSpacing.md),
       decoration: BoxDecoration(
         color: theme.cardColor,
@@ -409,7 +433,22 @@ class _RentalScreenState extends ConsumerState<RentalScreen>
           ),
         ],
       ),
-      child: Column(children: children),
+          child: Column(
+            children: [
+              if (rental.startDate != null)
+                _buildInfoRow('Start Date', DateFormat('MMM dd, yyyy').format(rental.startDate!)),
+              if (rental.endDate != null)
+                _buildInfoRow('End Date', DateFormat('MMM dd, yyyy').format(rental.endDate!)),
+              if (rental.startDate != null && rental.endDate != null)
+                _buildInfoRow('Duration', '${rental.endDate!.difference(rental.startDate!).inDays} days'),
+              _buildInfoRow('Total Price', '${rental.totalPrice ?? rental.totalPriceUsd ?? 0} ${rental.currency ?? 'MATIC'}'),
+              if (rental.txHash != null)
+                _buildInfoRow('Transaction', rental.txHash!, isHash: true),
+            ],
+          ),
+        ),
+        const SizedBox(height: AppSpacing.lg),
+      ],
     );
   }
 
@@ -453,26 +492,29 @@ class _RentalScreenState extends ConsumerState<RentalScreen>
           ),
         ),
         const SizedBox(height: AppSpacing.md),
+        if (rental.createdAt != null)
         _buildTimelineItem(
           theme,
           'Created',
-          DateFormat('MMM dd, yyyy HH:mm').format(rental.createdAt),
+            DateFormat('MMM dd, yyyy HH:mm').format(rental.createdAt!),
           Icons.add_circle,
           true,
         ),
+        if (rental.startDate != null)
         _buildTimelineItem(
           theme,
           'Start Date',
-          DateFormat('MMM dd, yyyy').format(rental.startDate),
+            DateFormat('MMM dd, yyyy').format(rental.startDate!),
           Icons.play_circle,
-          DateTime.now().isAfter(rental.startDate),
+            DateTime.now().isAfter(rental.startDate!),
         ),
+        if (rental.endDate != null)
         _buildTimelineItem(
           theme,
           'End Date',
-          DateFormat('MMM dd, yyyy').format(rental.endDate),
+            DateFormat('MMM dd, yyyy').format(rental.endDate!),
           Icons.stop_circle,
-          DateTime.now().isAfter(rental.endDate),
+            DateTime.now().isAfter(rental.endDate!),
         ),
         const SizedBox(height: AppSpacing.lg),
       ],
@@ -531,59 +573,11 @@ class _RentalScreenState extends ConsumerState<RentalScreen>
         ),
         const SizedBox(height: AppSpacing.md),
         
-        if (rental.status == 'pending') ...[
-          SizedBox(
-            width: double.infinity,
-            child: ElevatedButton.icon(
-              onPressed: () {
-                // TODO: Implement rental activation
-                ScaffoldMessenger.of(context).showSnackBar(
-                  const SnackBar(content: Text('Rental activation coming soon!')),
-                );
-              },
-              icon: const Icon(Icons.play_arrow),
-              label: const Text('Start Rental'),
-            ),
-          ),
-          const SizedBox(height: AppSpacing.sm),
-          SizedBox(
-            width: double.infinity,
-            child: OutlinedButton.icon(
-              onPressed: () {
-                // TODO: Implement rental cancellation
-                ScaffoldMessenger.of(context).showSnackBar(
-                  const SnackBar(content: Text('Rental cancellation coming soon!')),
-                );
-              },
-              icon: const Icon(Icons.cancel),
-              label: const Text('Cancel Rental'),
-            ),
-          ),
-        ],
-        
-        if (rental.status == 'active') ...[
-          SizedBox(
-            width: double.infinity,
-            child: ElevatedButton.icon(
-              onPressed: () {
-                // TODO: Implement rental completion
-                ScaffoldMessenger.of(context).showSnackBar(
-                  const SnackBar(content: Text('Rental completion coming soon!')),
-                );
-              },
-              icon: const Icon(Icons.check),
-              label: const Text('Complete Rental'),
-            ),
-          ),
-        ],
-        
-        const SizedBox(height: AppSpacing.sm),
         Row(
           children: [
             Expanded(
               child: OutlinedButton.icon(
                 onPressed: () {
-                  // TODO: Contact support
                   ScaffoldMessenger.of(context).showSnackBar(
                     const SnackBar(content: Text('Support coming soon!')),
                   );
@@ -596,7 +590,6 @@ class _RentalScreenState extends ConsumerState<RentalScreen>
             Expanded(
               child: OutlinedButton.icon(
                 onPressed: () {
-                  // TODO: Report issue
                   ScaffoldMessenger.of(context).showSnackBar(
                     const SnackBar(content: Text('Report issue coming soon!')),
                   );
@@ -611,11 +604,3 @@ class _RentalScreenState extends ConsumerState<RentalScreen>
     );
   }
 }
-
-
-
-
-
-
-
-
