@@ -1469,6 +1469,29 @@ class _HomeScreenState extends ConsumerState<HomeScreen> with SingleTickerProvid
 
     if (confirmed != true) return;
 
+    // Show loading dialog
+    if (mounted) {
+      showDialog(
+        context: context,
+        barrierDismissible: false,
+        builder: (context) => const Center(
+          child: Card(
+            child: Padding(
+              padding: EdgeInsets.all(24),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  CircularProgressIndicator(),
+                  SizedBox(height: 16),
+                  Text('Sign transaction in wallet...', style: TextStyle(fontSize: 16)),
+                ],
+              ),
+            ),
+          ),
+        ),
+      );
+    }
+
     try {
       final apiService = ApiService();
       final walletService = ref.read(walletServiceProvider);
@@ -1488,19 +1511,37 @@ class _HomeScreenState extends ConsumerState<HomeScreen> with SingleTickerProvid
         gas: 200000,
       );
 
-      // Show pending
+      // Update loading message
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('⏳ Removing listing...\nTX: ${txHash.substring(0, 10)}...'),
-            backgroundColor: Colors.orange,
-            duration: const Duration(seconds: 60),
+        Navigator.pop(context); // Close loading dialog
+        showDialog(
+          context: context,
+          barrierDismissible: false,
+          builder: (context) => Center(
+            child: Card(
+              child: Padding(
+                padding: const EdgeInsets.all(24),
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    const CircularProgressIndicator(),
+                    const SizedBox(height: 16),
+                    Text('Waiting for confirmation...\n${txHash.substring(0, 10)}...', 
+                      textAlign: TextAlign.center,
+                      style: const TextStyle(fontSize: 16)),
+                  ],
+                ),
+              ),
+            ),
           ),
         );
       }
 
       // Wait for confirmation
       final success = await apiService.waitForTransaction(txHash, maxWaitSeconds: 60);
+      
+      // Close loading dialog
+      if (mounted) Navigator.pop(context);
 
       if (mounted) {
         if (success) {
@@ -1517,6 +1558,9 @@ class _HomeScreenState extends ConsumerState<HomeScreen> with SingleTickerProvid
         }
       }
     } catch (e) {
+      // Close loading dialog if open
+      if (mounted) Navigator.pop(context);
+      
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
@@ -1671,20 +1715,36 @@ class _HomeScreenState extends ConsumerState<HomeScreen> with SingleTickerProvid
     int newShares,
     double newPrice,
   ) async {
+    // Show loading dialog for Step 1
+    if (mounted) {
+      showDialog(
+        context: context,
+        barrierDismissible: false,
+        builder: (context) => const Center(
+          child: Card(
+            child: Padding(
+              padding: EdgeInsets.all(24),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  CircularProgressIndicator(),
+                  SizedBox(height: 16),
+                  Text('Step 1/2: Sign cancel transaction...', 
+                    textAlign: TextAlign.center,
+                    style: TextStyle(fontSize: 16)),
+                ],
+              ),
+            ),
+          ),
+        ),
+      );
+    }
+
     try {
       final apiService = ApiService();
       final walletService = ref.read(walletServiceProvider);
 
       // Step 1: Cancel old listing
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('Step 1/2: Canceling old listing...'),
-            duration: Duration(seconds: 3),
-          ),
-        );
-      }
-
       final cancelResult = await apiService.prepareCancelListing(oldListing.listingId);
       if (cancelResult['success'] != true) {
         throw Exception('Failed to prepare cancel: ${cancelResult['error']}');
@@ -1697,6 +1757,32 @@ class _HomeScreenState extends ConsumerState<HomeScreen> with SingleTickerProvid
         gas: 200000,
       );
 
+      // Update loading message - waiting for cancel confirmation
+      if (mounted) {
+        Navigator.pop(context); // Close previous dialog
+        showDialog(
+          context: context,
+          barrierDismissible: false,
+          builder: (context) => Center(
+            child: Card(
+              child: Padding(
+                padding: const EdgeInsets.all(24),
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    const CircularProgressIndicator(),
+                    const SizedBox(height: 16),
+                    Text('Step 1/2: Waiting for confirmation...\n${cancelTxHash.substring(0, 10)}...', 
+                      textAlign: TextAlign.center,
+                      style: const TextStyle(fontSize: 16)),
+                  ],
+                ),
+              ),
+            ),
+          ),
+        );
+      }
+
       final cancelSuccess = await apiService.waitForTransaction(cancelTxHash);
       if (!cancelSuccess) {
         throw Exception('Cancel transaction failed');
@@ -1704,11 +1790,26 @@ class _HomeScreenState extends ConsumerState<HomeScreen> with SingleTickerProvid
 
       // Step 2: Create new listing
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('Step 2/2: Creating new listing...'),
-            backgroundColor: Colors.orange,
-            duration: Duration(seconds: 3),
+        Navigator.pop(context); // Close previous dialog
+        showDialog(
+          context: context,
+          barrierDismissible: false,
+          builder: (context) => const Center(
+            child: Card(
+              child: Padding(
+                padding: EdgeInsets.all(24),
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    CircularProgressIndicator(),
+                    SizedBox(height: 16),
+                    Text('Step 2/2: Sign new listing transaction...', 
+                      textAlign: TextAlign.center,
+                      style: TextStyle(fontSize: 16)),
+                  ],
+                ),
+              ),
+            ),
           ),
         );
       }
@@ -1730,7 +1831,36 @@ class _HomeScreenState extends ConsumerState<HomeScreen> with SingleTickerProvid
         gas: 500000,
       );
 
+      // Update loading message - waiting for create confirmation
+      if (mounted) {
+        Navigator.pop(context); // Close previous dialog
+        showDialog(
+          context: context,
+          barrierDismissible: false,
+          builder: (context) => Center(
+            child: Card(
+              child: Padding(
+                padding: const EdgeInsets.all(24),
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    const CircularProgressIndicator(),
+                    const SizedBox(height: 16),
+                    Text('Step 2/2: Waiting for confirmation...\n${createTxHash.substring(0, 10)}...', 
+                      textAlign: TextAlign.center,
+                      style: const TextStyle(fontSize: 16)),
+                  ],
+                ),
+              ),
+            ),
+          ),
+        );
+      }
+
       final createSuccess = await apiService.waitForTransaction(createTxHash);
+      
+      // Close loading dialog
+      if (mounted) Navigator.pop(context);
 
       if (mounted) {
         if (createSuccess) {
@@ -1747,6 +1877,9 @@ class _HomeScreenState extends ConsumerState<HomeScreen> with SingleTickerProvid
         }
       }
     } catch (e) {
+      // Close loading dialog if open
+      if (mounted) Navigator.pop(context);
+      
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
