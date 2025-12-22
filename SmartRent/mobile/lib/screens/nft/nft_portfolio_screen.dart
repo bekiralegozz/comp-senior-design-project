@@ -1,10 +1,13 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:go_router/go_router.dart';
 import '../../services/nft_service.dart';
 import '../../services/nft_models.dart';
 import '../../services/api_service.dart';
+import '../../core/providers/auth_provider.dart';
 import '../../core/providers/wallet_provider.dart';
+import '../../core/providers/asset_provider.dart';
 import '../../constants/config.dart';
 import 'package:web3dart/web3dart.dart';
 
@@ -64,6 +67,10 @@ class _NftPortfolioScreenState extends ConsumerState<NftPortfolioScreen> {
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
+        leading: IconButton(
+          icon: const Icon(Icons.arrow_back),
+          onPressed: () => context.go('/'),
+        ),
         title: const Text('My NFT Portfolio'),
         actions: [
           IconButton(
@@ -387,7 +394,44 @@ class _NftPortfolioScreenState extends ConsumerState<NftPortfolioScreen> {
     );
   }
 
-  void _sellShares(UserNftHolding holding) {
+  void _sellShares(UserNftHolding holding) async {
+    // First, check how many shares are already listed
+    int totalListedShares = 0;
+    try {
+      final walletAddress = ref.read(walletAddressProvider);
+      if (walletAddress != null) {
+        final myListingsResult = await ApiService().getMyListings(walletAddress);
+        final List<dynamic> listings = myListingsResult['listings'] ?? [];
+        
+        // Calculate total shares already listed for this token
+        for (var listing in listings) {
+          if (listing['token_id'] == holding.tokenId && listing['is_active'] == true) {
+            totalListedShares += (listing['shares_remaining'] as num).toInt();
+          }
+        }
+      }
+    } catch (e) {
+      print('Error fetching listings: $e');
+    }
+
+    final maxAvailableShares = holding.shares - totalListedShares;
+
+    if (maxAvailableShares <= 0) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(
+              'All your ${holding.name} shares are already listed!\n'
+              'Total owned: ${holding.shares}, Already listed: $totalListedShares',
+            ),
+            backgroundColor: Colors.orange,
+            duration: const Duration(seconds: 5),
+          ),
+        );
+      }
+      return;
+    }
+
     final sharesController = TextEditingController();
     final priceController = TextEditingController();
     final formKey = GlobalKey<FormState>();
@@ -437,7 +481,9 @@ class _NftPortfolioScreenState extends ConsumerState<NftPortfolioScreen> {
                   ),
                   const SizedBox(height: 8),
                   Text(
-                    'Available: ${holding.shares} shares (${holding.ownershipPercentage.toStringAsFixed(1)}%)',
+                    'Total owned: ${holding.shares} shares\n'
+                    'Already listed: $totalListedShares shares\n'
+                    'Available to list: $maxAvailableShares shares',
                     style: TextStyle(color: Colors.grey[600]),
                   ),
                   const SizedBox(height: 24),
@@ -448,7 +494,7 @@ class _NftPortfolioScreenState extends ConsumerState<NftPortfolioScreen> {
                     keyboardType: TextInputType.number,
                     decoration: InputDecoration(
                       labelText: 'Shares to sell',
-                      hintText: 'Max: ${holding.shares}',
+                      hintText: 'Max: $maxAvailableShares',
                       border: const OutlineInputBorder(),
                       suffixText: 'shares',
                     ),
@@ -460,8 +506,8 @@ class _NftPortfolioScreenState extends ConsumerState<NftPortfolioScreen> {
                       if (shares == null || shares <= 0) {
                         return 'Enter a valid number';
                       }
-                      if (shares > holding.shares) {
-                        return 'Max ${holding.shares} shares';
+                      if (shares > maxAvailableShares) {
+                        return 'Max $maxAvailableShares shares available';
                       }
                       return null;
                     },
@@ -591,12 +637,177 @@ class _NftPortfolioScreenState extends ConsumerState<NftPortfolioScreen> {
   }) async {
     final apiService = ApiService();
     final walletService = ref.read(walletServiceProvider);
+    final walletAddress = widget.walletAddress;
     
-    // Step 1: First need to approve SmartRentHub to transfer tokens
-    // For now, we'll skip approval check and assume user has approved
-    // TODO: Add approval check and approval flow
+    if (walletAddress == null) {
+      throw Exception('Wallet not connected');
+    }
     
-    // Step 2: Prepare listing transaction
+    // Step 1: Check if asset is registered in SmartRentHub
+    if (mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Checking asset registration...'),
+          duration: Duration(seconds: 2),
+        ),
+      );
+    }
+    
+    final isRegistered = await apiService.isAssetRegistered(holding.tokenId);
+    
+    // Step 1a: If not registered, register it first
+    if (!isRegistered) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Asset not registered. Registering in SmartRentHub...'),
+            duration: Duration(seconds: 3),
+            backgroundColor: Colors.orange,
+          ),
+        );
+      }
+      
+      // Prepare registration transaction
+      final registerResult = await apiService.prepareRegisterAsset(
+        tokenId: holding.tokenId,
+        owner: walletAddress,
+      );
+      
+      if (registerResult['success'] != true) {
+        throw Exception(registerResult['error'] ?? 'Failed to prepare asset registration');
+      }
+      
+      // Send registration transaction
+      final registerTxHash = await walletService.sendTransaction(
+        to: registerResult['contract_address'] as String,
+        value: EtherAmount.zero(),
+        data: registerResult['function_data'] as String,
+        gas: 500000,  // Increased for complex contract operations
+      );
+      
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('⏳ Waiting for asset registration...\nTX: ${registerTxHash.substring(0, 10)}...'),
+            backgroundColor: Colors.orange,
+            duration: const Duration(seconds: 60),
+          ),
+        );
+      }
+      
+      // Wait for registration to complete
+      final registerSuccess = await apiService.waitForTransaction(registerTxHash, maxWaitSeconds: 60);
+      
+      if (!registerSuccess) {
+        throw Exception('Asset registration failed');
+      }
+      
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('✅ Asset registered in SmartRentHub!'),
+            backgroundColor: Colors.green,
+            duration: Duration(seconds: 2),
+          ),
+        );
+      }
+    }
+    
+    // Step 2: Check if SmartRentHub is approved
+    if (mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Checking approval status...'),
+          duration: Duration(seconds: 2),
+        ),
+      );
+    }
+    
+    final isApproved = await apiService.checkApproval(walletAddress);
+    
+    // Step 2a: If not approved, request approval first
+    if (!isApproved) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('First-time setup: Approving SmartRentHub...'),
+            duration: Duration(seconds: 3),
+            backgroundColor: Colors.orange,
+          ),
+        );
+      }
+      
+      // Prepare approval transaction
+      final approvalResult = await apiService.prepareApproval();
+      
+      if (approvalResult['success'] != true) {
+        throw Exception(approvalResult['error'] ?? 'Failed to prepare approval');
+      }
+      
+      // Send approval transaction
+      final approvalTxHash = await walletService.sendTransaction(
+        to: approvalResult['contract_address'] as String,
+        value: EtherAmount.zero(),
+        data: approvalResult['function_data'] as String,
+        gas: 150000,  // Increased for safety
+      );
+      
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Approval granted! TX: ${approvalTxHash.substring(0, 10)}...'),
+            backgroundColor: Colors.green,
+            duration: const Duration(seconds: 3),
+          ),
+        );
+      }
+      
+      // Wait for transaction to be confirmed on blockchain
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('⏳ Waiting for approval to be confirmed on blockchain...'),
+            duration: Duration(seconds: 10),
+            backgroundColor: Colors.orange,
+          ),
+        );
+      }
+      
+      // Poll blockchain to verify approval (max 30 seconds)
+      bool approvalConfirmed = false;
+      for (int i = 0; i < 15; i++) {
+        await Future.delayed(const Duration(seconds: 2));
+        approvalConfirmed = await apiService.checkApproval(walletAddress);
+        if (approvalConfirmed) {
+          break;
+        }
+      }
+      
+      if (!approvalConfirmed) {
+        throw Exception('Approval transaction not confirmed. Please try again.');
+      }
+      
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('✅ Approval confirmed on blockchain!'),
+            backgroundColor: Colors.green,
+            duration: Duration(seconds: 2),
+          ),
+        );
+      }
+    }
+    
+    // Step 3: Prepare listing transaction
+    if (mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Creating listing...'),
+          duration: Duration(seconds: 2),
+        ),
+      );
+    }
+    
     final prepareResult = await apiService.prepareCreateListing(
       tokenId: holding.tokenId,
       sharesForSale: shares,
@@ -610,26 +821,62 @@ class _NftPortfolioScreenState extends ConsumerState<NftPortfolioScreen> {
     final contractAddress = prepareResult['contract_address'] as String;
     final functionData = prepareResult['function_data'] as String;
     
-    // Step 3: Send transaction via WalletConnect
+    // Step 4: Send listing transaction via WalletConnect
     final txHash = await walletService.sendTransaction(
       to: contractAddress,
       value: EtherAmount.zero(),
       data: functionData.startsWith('0x') ? functionData : '0x$functionData',
-      gas: 200000,
+      gas: 500000,  // Increased for createListing storage operations
     );
     
-    // Step 4: Show success
+    // Step 5: Wait for transaction to be mined
     if (mounted) {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-          content: Text('Listing created! TX: ${txHash.substring(0, 10)}...'),
-          backgroundColor: Colors.green,
-          duration: const Duration(seconds: 5),
+          content: Text('⏳ Transaction sent! Waiting for blockchain confirmation...\nTX: ${txHash.substring(0, 10)}...'),
+          backgroundColor: Colors.orange,
+          duration: const Duration(seconds: 60),
         ),
       );
+    }
+    
+    // Wait for confirmation (max 60 seconds)
+    try {
+      final success = await apiService.waitForTransaction(txHash, maxWaitSeconds: 60);
       
-      // Refresh holdings
-      _loadHoldings();
+      if (mounted) {
+        if (success) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text('✅ Listing created successfully!\nTX: ${txHash.substring(0, 10)}...'),
+              backgroundColor: Colors.green,
+              duration: const Duration(seconds: 5),
+            ),
+          );
+          
+          // Refresh holdings and marketplace
+          _loadHoldings();
+          ref.invalidate(listingsProvider);
+        } else {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text('❌ Transaction failed on blockchain!\nTX: ${txHash.substring(0, 10)}...'),
+              backgroundColor: Colors.red,
+              duration: const Duration(seconds: 5),
+            ),
+          );
+        }
+      }
+    } on ApiException catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('⚠️ Transaction timeout. Check transaction manually.\nTX: ${txHash.substring(0, 10)}...'),
+            backgroundColor: Colors.orange,
+            duration: const Duration(seconds: 5),
+          ),
+        );
+      }
     }
   }
 
@@ -647,3 +894,4 @@ class _NftPortfolioScreenState extends ConsumerState<NftPortfolioScreen> {
     );
   }
 }
+

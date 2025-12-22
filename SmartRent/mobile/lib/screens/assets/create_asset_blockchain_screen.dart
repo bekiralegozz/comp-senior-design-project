@@ -227,6 +227,10 @@ class _CreateAssetBlockchainScreenState
 
     return Scaffold(
       appBar: AppBar(
+        leading: IconButton(
+          icon: const Icon(Icons.arrow_back),
+          onPressed: () => context.go('/'),
+        ),
         title: const Text('Create Asset (Blockchain)'),
         elevation: 0,
       ),
