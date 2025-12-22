@@ -386,6 +386,106 @@ class ApiService {
     }
   }
 
+  /// Check if wallet has approved SmartRentHub
+  Future<bool> checkApproval(String walletAddress) async {
+    try {
+      final response = await dio.get('/nft/approval/check/$walletAddress');
+      return response.data['is_approved'] ?? false;
+    } catch (e) {
+      throw ApiException(
+        'Failed to check approval: ${e.toString()}',
+        type: ApiExceptionType.unknown,
+      );
+    }
+  }
+
+  /// Prepare approval transaction
+  Future<Map<String, dynamic>> prepareApproval() async {
+    try {
+      final response = await dio.post('/nft/approval/prepare');
+      return response.data as Map<String, dynamic>;
+    } catch (e) {
+      throw ApiException(
+        'Failed to prepare approval: ${e.toString()}',
+        type: ApiExceptionType.unknown,
+      );
+    }
+  }
+
+  /// Check if asset is registered in SmartRentHub
+  Future<bool> isAssetRegistered(int tokenId) async {
+    try {
+      final response = await dio.get('/nft/assets/$tokenId/is-registered');
+      return response.data['is_registered'] ?? false;
+    } catch (e) {
+      throw ApiException(
+        'Failed to check asset registration: ${e.toString()}',
+        type: ApiExceptionType.unknown,
+      );
+    }
+  }
+
+  /// Prepare asset registration transaction
+  Future<Map<String, dynamic>> prepareRegisterAsset({
+    required int tokenId,
+    required String owner,
+  }) async {
+    try {
+      final response = await dio.post(
+        '/nft/assets/prepare-register',
+        queryParameters: {
+          'token_id': tokenId,
+          'owner': owner,
+        },
+      );
+      return response.data as Map<String, dynamic>;
+    } catch (e) {
+      throw ApiException(
+        'Failed to prepare asset registration: ${e.toString()}',
+        type: ApiExceptionType.unknown,
+      );
+    }
+  }
+
+  /// Check transaction status
+  Future<Map<String, dynamic>> getTransactionStatus(String txHash) async {
+    try {
+      final response = await dio.get('/nft/transaction/status/$txHash');
+      return response.data as Map<String, dynamic>;
+    } catch (e) {
+      throw ApiException(
+        'Failed to get transaction status: ${e.toString()}',
+        type: ApiExceptionType.unknown,
+      );
+    }
+  }
+
+  /// Wait for transaction to be mined (polls every 2 seconds, max 60 seconds)
+  Future<bool> waitForTransaction(String txHash, {int maxWaitSeconds = 60}) async {
+    final maxAttempts = maxWaitSeconds ~/ 2;
+    
+    for (int i = 0; i < maxAttempts; i++) {
+      await Future.delayed(const Duration(seconds: 2));
+      
+      try {
+        final status = await getTransactionStatus(txHash);
+        
+        if (status['mined'] == true) {
+          return status['success'] == true;
+        }
+      } catch (e) {
+        // Continue waiting if there's an error
+        continue;
+      }
+    }
+    
+    // Timeout
+    throw ApiException(
+      'Transaction not mined after $maxWaitSeconds seconds',
+      type: ApiExceptionType.timeout,
+    );
+  }
+
   // ============================================
   // HEALTH CHECK
   // ============================================

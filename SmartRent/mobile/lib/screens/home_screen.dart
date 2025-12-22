@@ -27,10 +27,17 @@ class HomeScreen extends ConsumerStatefulWidget {
   ConsumerState<HomeScreen> createState() => _HomeScreenState();
 }
 
+enum SortBy { highestPrice, lowestPrice }
+
 class _HomeScreenState extends ConsumerState<HomeScreen> with SingleTickerProviderStateMixin {
   final _searchController = TextEditingController();
   String _selectedCategory = '';
   late TabController _tabController;
+  
+  // Marketplace filters and sorting
+  SortBy? _sortBy;
+  bool _filterAffordable = false;
+  bool _filterMyListings = false;
 
   @override
   void initState() {
@@ -705,18 +712,78 @@ class _HomeScreenState extends ConsumerState<HomeScreen> with SingleTickerProvid
 
   Widget _buildMarketplaceTab(ThemeData theme) {
     final listingsState = ref.watch(listingsProvider);
+    final walletAddress = ref.watch(walletAddressProvider);
+    
+    // Get user's balance for filtering (convert String to double)
+    final walletState = ref.watch(walletProvider);
+    final userBalance = walletState.balance != null 
+        ? double.tryParse(walletState.balance!) 
+        : null;
 
     return RefreshIndicator(
       onRefresh: () async {
         ref.invalidate(listingsProvider);
       },
-      child: listingsState.isLoading
-          ? const Center(child: CircularProgressIndicator())
-          : listingsState.error != null
-              ? _buildMarketplaceError(theme, listingsState.error!)
-              : listingsState.listings.isEmpty
-                  ? _buildEmptyMarketplace(theme)
-                  : _buildListingsGrid(theme, listingsState.listings),
+      child: Column(
+        children: [
+          // Filter and Sort buttons
+          Container(
+            padding: const EdgeInsets.all(AppSpacing.sm),
+            child: Row(
+              children: [
+                // Sort button
+                Expanded(
+                  child: OutlinedButton.icon(
+                    onPressed: () => _showSortOptions(theme),
+                    icon: const Icon(Icons.sort),
+                    label: Text(_sortBy == null 
+                        ? 'Sort' 
+                        : _sortBy == SortBy.highestPrice 
+                            ? 'Highest Price' 
+                            : 'Lowest Price'),
+                  ),
+                ),
+                const SizedBox(width: AppSpacing.sm),
+                // Filter button
+                Expanded(
+                  child: OutlinedButton.icon(
+                    onPressed: () => _showFilterOptions(theme),
+                    icon: Icon(
+                      Icons.filter_list,
+                      color: (_filterAffordable || _filterMyListings) ? AppColors.primary : null,
+                    ),
+                    label: Text(
+                      (_filterAffordable || _filterMyListings) 
+                          ? 'Filter (${(_filterAffordable ? 1 : 0) + (_filterMyListings ? 1 : 0)})' 
+                          : 'Filter',
+                      style: TextStyle(
+                        color: (_filterAffordable || _filterMyListings) ? AppColors.primary : null,
+                      ),
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+          // Listings
+          Expanded(
+            child: listingsState.isLoading
+                ? const Center(child: CircularProgressIndicator())
+                : listingsState.error != null
+                    ? _buildMarketplaceError(theme, listingsState.error!)
+                    : listingsState.listings.isEmpty
+                        ? _buildEmptyMarketplace(theme)
+                        : _buildListingsGrid(
+                            theme, 
+                            _filterAndSortListings(
+                              listingsState.listings,
+                              userBalance,
+                              walletAddress,
+                            ),
+                          ),
+          ),
+        ],
+      ),
     );
   }
 
@@ -804,6 +871,10 @@ class _HomeScreenState extends ConsumerState<HomeScreen> with SingleTickerProvid
   }
 
   Widget _buildListingCard(ThemeData theme, MarketplaceListing listing) {
+    final walletAddress = ref.watch(walletAddressProvider);
+    final isOwnListing = walletAddress != null && 
+                         listing.seller.toLowerCase() == walletAddress.toLowerCase();
+    
     return Card(
       margin: const EdgeInsets.only(bottom: AppSpacing.md),
       child: InkWell(
@@ -918,13 +989,40 @@ class _HomeScreenState extends ConsumerState<HomeScreen> with SingleTickerProvid
                           ),
                         ],
                       ),
-                      ElevatedButton(
-                        onPressed: () => _showBuyDialog(listing),
-                        style: ElevatedButton.styleFrom(
-                          backgroundColor: AppColors.success,
-                        ),
-                        child: const Text('Buy'),
-                      ),
+                      isOwnListing
+                          ? Row(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                OutlinedButton.icon(
+                                  onPressed: () => _showEditListingDialog(listing),
+                                  icon: const Icon(Icons.edit, size: 16),
+                                  label: const Text('Edit', style: TextStyle(fontSize: 13)),
+                                  style: OutlinedButton.styleFrom(
+                                    foregroundColor: AppColors.primary,
+                                    padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                                    minimumSize: const Size(0, 32),
+                                  ),
+                                ),
+                                const SizedBox(width: 6),
+                                OutlinedButton.icon(
+                                  onPressed: () => _removeListing(listing),
+                                  icon: const Icon(Icons.delete, size: 16),
+                                  label: const Text('Remove', style: TextStyle(fontSize: 13)),
+                                  style: OutlinedButton.styleFrom(
+                                    foregroundColor: AppColors.error,
+                                    padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                                    minimumSize: const Size(0, 32),
+                                  ),
+                                ),
+                              ],
+                            )
+                          : ElevatedButton(
+                              onPressed: () => _showBuyDialog(listing),
+                              style: ElevatedButton.styleFrom(
+                                backgroundColor: AppColors.success,
+                              ),
+                              child: const Text('Buy'),
+                            ),
                     ],
                   ),
                   
@@ -1178,18 +1276,486 @@ class _HomeScreenState extends ConsumerState<HomeScreen> with SingleTickerProvid
       gas: 300000,
     );
     
-    // Step 3: Show success
+    // Step 3: Show pending message
     if (mounted) {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-          content: Text('Purchase successful! TX: ${txHash.substring(0, 10)}...'),
+          content: Text('⏳ Waiting for transaction to complete...\nTX: ${txHash.substring(0, 10)}...'),
+          backgroundColor: Colors.orange,
+          duration: const Duration(seconds: 60),
+        ),
+      );
+    }
+    
+    // Step 4: Wait for transaction to be mined
+    final success = await apiService.waitForTransaction(txHash, maxWaitSeconds: 60);
+    
+    if (!success) {
+      throw Exception('Transaction failed or timed out');
+    }
+    
+    // Step 5: Show success and refresh
+    if (mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('✅ Purchase successful! TX: ${txHash.substring(0, 10)}...'),
           backgroundColor: Colors.green,
           duration: const Duration(seconds: 5),
         ),
       );
       
-      // Refresh listings
+      // Refresh listings - now the blockchain is updated!
       ref.invalidate(listingsProvider);
+      
+      // Also refresh user's assets
+      ref.invalidate(allAssetsProvider);
+    }
+  }
+
+  // Filter and sort listings
+  List<MarketplaceListing> _filterAndSortListings(
+    List<MarketplaceListing> listings,
+    double? userBalance,
+    String? walletAddress,
+  ) {
+    var filtered = listings;
+    
+    // Apply "Listed by Me" filter
+    if (_filterMyListings && walletAddress != null) {
+      filtered = filtered.where((listing) {
+        return listing.seller.toLowerCase() == walletAddress.toLowerCase();
+      }).toList();
+    }
+    
+    // Apply affordable filter
+    if (_filterAffordable && userBalance != null) {
+      filtered = filtered.where((listing) {
+        return listing.pricePerSharePol <= userBalance;
+      }).toList();
+    }
+    
+    // Apply sorting
+    if (_sortBy != null) {
+      filtered = List.from(filtered);
+      if (_sortBy == SortBy.highestPrice) {
+        filtered.sort((a, b) => b.pricePerSharePol.compareTo(a.pricePerSharePol));
+      } else {
+        filtered.sort((a, b) => a.pricePerSharePol.compareTo(b.pricePerSharePol));
+      }
+    }
+    
+    return filtered;
+  }
+
+  void _showSortOptions(ThemeData theme) {
+    showModalBottomSheet(
+      context: context,
+      builder: (context) => Container(
+        padding: const EdgeInsets.all(AppSpacing.lg),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              'Sort By',
+              style: theme.textTheme.titleLarge?.copyWith(
+                fontWeight: FontWeight.bold,
+              ),
+            ),
+            const SizedBox(height: AppSpacing.md),
+            ListTile(
+              leading: Icon(
+                Icons.arrow_downward,
+                color: _sortBy == SortBy.highestPrice ? AppColors.primary : null,
+              ),
+              title: const Text('Highest Price'),
+              selected: _sortBy == SortBy.highestPrice,
+              onTap: () {
+                setState(() => _sortBy = SortBy.highestPrice);
+                Navigator.pop(context);
+              },
+            ),
+            ListTile(
+              leading: Icon(
+                Icons.arrow_upward,
+                color: _sortBy == SortBy.lowestPrice ? AppColors.primary : null,
+              ),
+              title: const Text('Lowest Price'),
+              selected: _sortBy == SortBy.lowestPrice,
+              onTap: () {
+                setState(() => _sortBy = SortBy.lowestPrice);
+                Navigator.pop(context);
+              },
+            ),
+            if (_sortBy != null)
+              ListTile(
+                leading: const Icon(Icons.clear),
+                title: const Text('Clear Sort'),
+                onTap: () {
+                  setState(() => _sortBy = null);
+                  Navigator.pop(context);
+                },
+              ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  void _showFilterOptions(ThemeData theme) {
+    showModalBottomSheet(
+      context: context,
+      builder: (context) => Container(
+        padding: const EdgeInsets.all(AppSpacing.lg),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              'Filter',
+              style: theme.textTheme.titleLarge?.copyWith(
+                fontWeight: FontWeight.bold,
+              ),
+            ),
+            const SizedBox(height: AppSpacing.md),
+            CheckboxListTile(
+              title: const Text('Listed by Me'),
+              subtitle: const Text('Only show my listings'),
+              value: _filterMyListings,
+              onChanged: (value) {
+                setState(() => _filterMyListings = value ?? false);
+                Navigator.pop(context);
+              },
+            ),
+            CheckboxListTile(
+              title: const Text('Affordable NFTs'),
+              subtitle: const Text('Only show shares within my balance'),
+              value: _filterAffordable,
+              onChanged: (value) {
+                setState(() => _filterAffordable = value ?? false);
+                Navigator.pop(context);
+              },
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  // Remove listing
+  Future<void> _removeListing(MarketplaceListing listing) async {
+    // Show confirmation dialog
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Remove Listing'),
+        content: Text(
+          'Are you sure you want to remove this listing?\n\n'
+          '${listing.sharesRemaining} shares will be unlisted.',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context, false),
+            child: const Text('Cancel'),
+          ),
+          ElevatedButton(
+            onPressed: () => Navigator.pop(context, true),
+            style: ElevatedButton.styleFrom(backgroundColor: AppColors.error),
+            child: const Text('Remove'),
+          ),
+        ],
+      ),
+    );
+
+    if (confirmed != true) return;
+
+    try {
+      final apiService = ApiService();
+      final walletService = ref.read(walletServiceProvider);
+
+      // Prepare cancel transaction
+      final prepareResult = await apiService.prepareCancelListing(listing.listingId);
+
+      if (prepareResult['success'] != true) {
+        throw Exception(prepareResult['error'] ?? 'Failed to prepare cancel');
+      }
+
+      // Send transaction
+      final txHash = await walletService.sendTransaction(
+        to: prepareResult['contract_address'] as String,
+        value: EtherAmount.zero(),
+        data: prepareResult['function_data'] as String,
+        gas: 200000,
+      );
+
+      // Show pending
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('⏳ Removing listing...\nTX: ${txHash.substring(0, 10)}...'),
+            backgroundColor: Colors.orange,
+            duration: const Duration(seconds: 60),
+          ),
+        );
+      }
+
+      // Wait for confirmation
+      final success = await apiService.waitForTransaction(txHash, maxWaitSeconds: 60);
+
+      if (mounted) {
+        if (success) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text('✅ Listing removed!\nTX: ${txHash.substring(0, 10)}...'),
+              backgroundColor: Colors.green,
+              duration: const Duration(seconds: 5),
+            ),
+          );
+          ref.invalidate(listingsProvider);
+        } else {
+          throw Exception('Transaction failed');
+        }
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('❌ Failed to remove listing: $e'),
+            backgroundColor: Colors.red,
+            duration: const Duration(seconds: 5),
+          ),
+        );
+      }
+    }
+  }
+
+  // Edit listing (cancel + create new)
+  void _showEditListingDialog(MarketplaceListing listing) {
+    final sharesController = TextEditingController(
+      text: listing.sharesRemaining.toString(),
+    );
+    final priceController = TextEditingController(
+      text: listing.pricePerSharePol.toStringAsFixed(4),
+    );
+    final formKey = GlobalKey<FormState>();
+
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      builder: (context) => Container(
+        padding: EdgeInsets.only(
+          bottom: MediaQuery.of(context).viewInsets.bottom,
+        ),
+        decoration: const BoxDecoration(
+          color: Colors.white,
+          borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+        ),
+        child: Padding(
+          padding: const EdgeInsets.all(24),
+          child: Form(
+            key: formKey,
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                // Handle bar
+                Center(
+                  child: Container(
+                    width: 40,
+                    height: 4,
+                    margin: const EdgeInsets.only(bottom: 20),
+                    decoration: BoxDecoration(
+                      color: Colors.grey[300],
+                      borderRadius: BorderRadius.circular(2),
+                    ),
+                  ),
+                ),
+                
+                // Title
+                Text(
+                  'Edit Listing - ${listing.assetName}',
+                  style: const TextStyle(
+                    fontSize: 20,
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
+                const SizedBox(height: 24),
+                
+                // Shares input
+                TextFormField(
+                  controller: sharesController,
+                  decoration: const InputDecoration(
+                    labelText: 'Number of Shares',
+                    border: OutlineInputBorder(),
+                  ),
+                  keyboardType: TextInputType.number,
+                  validator: (value) {
+                    if (value == null || value.isEmpty) {
+                      return 'Please enter number of shares';
+                    }
+                    final shares = int.tryParse(value);
+                    if (shares == null || shares <= 0) {
+                      return 'Shares must be greater than 0';
+                    }
+                    return null;
+                  },
+                ),
+                const SizedBox(height: 16),
+                
+                // Price input
+                TextFormField(
+                  controller: priceController,
+                  decoration: const InputDecoration(
+                    labelText: 'Price per Share (POL)',
+                    border: OutlineInputBorder(),
+                  ),
+                  keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                  validator: (value) {
+                    if (value == null || value.isEmpty) {
+                      return 'Please enter price';
+                    }
+                    final price = double.tryParse(value);
+                    if (price == null || price <= 0) {
+                      return 'Price must be greater than 0';
+                    }
+                    return null;
+                  },
+                ),
+                const SizedBox(height: 24),
+                
+                // Update button
+                SizedBox(
+                  width: double.infinity,
+                  child: ElevatedButton(
+                    onPressed: () async {
+                      if (!formKey.currentState!.validate()) return;
+                      
+                      final shares = int.parse(sharesController.text);
+                      final price = double.parse(priceController.text);
+                      
+                      Navigator.pop(context);
+                      await _executeEditListing(listing, shares, price);
+                    },
+                    style: ElevatedButton.styleFrom(
+                      padding: const EdgeInsets.all(16),
+                      backgroundColor: AppColors.primary,
+                    ),
+                    child: const Text(
+                      'Update Listing',
+                      style: TextStyle(fontSize: 16, color: Colors.white),
+                    ),
+                  ),
+                ),
+                const SizedBox(height: 12),
+                
+                // Cancel button
+                SizedBox(
+                  width: double.infinity,
+                  child: TextButton(
+                    onPressed: () => Navigator.pop(context),
+                    child: const Text('Cancel'),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  // Execute edit listing (cancel old + create new)
+  Future<void> _executeEditListing(
+    MarketplaceListing oldListing,
+    int newShares,
+    double newPrice,
+  ) async {
+    try {
+      final apiService = ApiService();
+      final walletService = ref.read(walletServiceProvider);
+
+      // Step 1: Cancel old listing
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Step 1/2: Canceling old listing...'),
+            duration: Duration(seconds: 3),
+          ),
+        );
+      }
+
+      final cancelResult = await apiService.prepareCancelListing(oldListing.listingId);
+      if (cancelResult['success'] != true) {
+        throw Exception('Failed to prepare cancel: ${cancelResult['error']}');
+      }
+
+      final cancelTxHash = await walletService.sendTransaction(
+        to: cancelResult['contract_address'] as String,
+        value: EtherAmount.zero(),
+        data: cancelResult['function_data'] as String,
+        gas: 200000,
+      );
+
+      final cancelSuccess = await apiService.waitForTransaction(cancelTxHash);
+      if (!cancelSuccess) {
+        throw Exception('Cancel transaction failed');
+      }
+
+      // Step 2: Create new listing
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Step 2/2: Creating new listing...'),
+            backgroundColor: Colors.orange,
+            duration: Duration(seconds: 3),
+          ),
+        );
+      }
+
+      final createResult = await apiService.prepareCreateListing(
+        tokenId: oldListing.tokenId,
+        sharesForSale: newShares,
+        pricePerSharePol: newPrice,
+      );
+
+      if (createResult['success'] != true) {
+        throw Exception('Failed to prepare new listing: ${createResult['error']}');
+      }
+
+      final createTxHash = await walletService.sendTransaction(
+        to: createResult['contract_address'] as String,
+        value: EtherAmount.zero(),
+        data: createResult['function_data'] as String,
+        gas: 500000,
+      );
+
+      final createSuccess = await apiService.waitForTransaction(createTxHash);
+
+      if (mounted) {
+        if (createSuccess) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text('✅ Listing updated!\nNew: $newShares shares @ $newPrice POL'),
+              backgroundColor: Colors.green,
+              duration: const Duration(seconds: 5),
+            ),
+          );
+          ref.invalidate(listingsProvider);
+        } else {
+          throw Exception('Create transaction failed');
+        }
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('❌ Failed to update listing: $e'),
+            backgroundColor: Colors.red,
+            duration: const Duration(seconds: 5),
+          ),
+        );
+      }
     }
   }
 

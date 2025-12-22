@@ -116,7 +116,7 @@ class SmartRentHubService:
                 "metadata_uri": asset[1],
                 "total_shares": asset[2],
                 "created_at": asset[3],
-                "owners": list(asset[4]) if len(asset) > 4 else []
+                "exists": asset[4] if len(asset) > 4 else False
             }
             
         except Exception as e:
@@ -372,6 +372,215 @@ class SmartRentHubService:
         except Exception as e:
             logger.error(f"Error fetching metadata from {metadata_uri}: {e}")
             return None
+    
+    # ==================== Approval Functions ====================
+    
+    def check_approval(self, owner_address: str) -> bool:
+        """
+        Check if owner has approved SmartRentHub to transfer their tokens
+        
+        Returns: True if approved, False otherwise
+        """
+        try:
+            if not self.building_address:
+                logger.error("Building1122 address not set")
+                return False
+            
+            # Load Building1122 ABI
+            building_abi = self._load_building_abi()
+            if not building_abi:
+                return False
+            
+            # Create Building1122 contract instance
+            building_contract = self.w3.eth.contract(
+                address=Web3.to_checksum_address(self.building_address),
+                abi=building_abi
+            )
+            
+            # Check isApprovedForAll(owner, operator)
+            is_approved = building_contract.functions.isApprovedForAll(
+                Web3.to_checksum_address(owner_address),
+                Web3.to_checksum_address(self.contract_address)
+            ).call()
+            
+            return is_approved
+            
+        except Exception as e:
+            logger.error(f"Error checking approval for {owner_address}: {e}")
+            return False
+    
+    def prepare_approval(self, approved: bool = True) -> Dict:
+        """
+        Prepare setApprovalForAll transaction data
+        
+        Args:
+            approved: True to approve, False to revoke
+        
+        Returns: Dict with contract address and encoded function data
+        """
+        try:
+            if not self.building_address:
+                return {"success": False, "error": "Building1122 address not set"}
+            
+            # Load Building1122 ABI
+            building_abi = self._load_building_abi()
+            if not building_abi:
+                return {"success": False, "error": "Building1122 ABI not found"}
+            
+            # Create Building1122 contract instance
+            building_contract = self.w3.eth.contract(
+                address=Web3.to_checksum_address(self.building_address),
+                abi=building_abi
+            )
+            
+            # Encode setApprovalForAll(operator, approved)
+            function_data = building_contract.encodeABI(
+                fn_name="setApprovalForAll",
+                args=[Web3.to_checksum_address(self.contract_address), approved]
+            )
+            
+            return {
+                "success": True,
+                "contract_address": self.building_address,
+                "function_data": function_data.hex() if isinstance(function_data, bytes) else function_data,
+                "gas_estimate": "0.005 POL",
+                "approved": approved
+            }
+            
+        except Exception as e:
+            logger.error(f"Error preparing approval: {e}")
+            return {"success": False, "error": str(e)}
+    
+    def _load_building_abi(self) -> List:
+        """Load Building1122 ABI from abis folder"""
+        try:
+            abi_path = Path(__file__).parent.parent.parent.parent / "blockchain" / "abis" / "Building1122.json"
+            
+            if abi_path.exists():
+                with open(abi_path, 'r') as f:
+                    contract_data = json.load(f)
+                    if isinstance(contract_data, list):
+                        return contract_data
+                    return contract_data.get('abi', [])
+            
+            # Fallback to artifacts
+            abi_path = Path(__file__).parent.parent.parent.parent / "blockchain" / "artifacts" / "contracts" / "Building1122.sol" / "Building1122.json"
+            if abi_path.exists():
+                with open(abi_path, 'r') as f:
+                    contract_data = json.load(f)
+                    return contract_data.get('abi', [])
+            
+            logger.warning("Building1122 ABI not found")
+            return []
+        except Exception as e:
+            logger.error(f"Error loading Building1122 ABI: {e}")
+            return []
+    
+    def get_transaction_status(self, tx_hash: str) -> Dict:
+        """
+        Check if a transaction has been mined and was successful
+        
+        Returns: Dict with status information
+        """
+        try:
+            # Get transaction receipt (returns None if not mined yet)
+            receipt = self.w3.eth.get_transaction_receipt(tx_hash)
+            
+            if receipt is None:
+                return {
+                    "mined": False,
+                    "pending": True
+                }
+            
+            # Transaction mined, check success (status == 1)
+            return {
+                "mined": True,
+                "success": receipt['status'] == 1,
+                "block_number": receipt['blockNumber'],
+                "gas_used": receipt['gasUsed'],
+                "transaction_hash": receipt['transactionHash'].hex()
+            }
+            
+        except Exception as e:
+            # If transaction not found, it's still pending
+            if "not found" in str(e).lower():
+                return {
+                    "mined": False,
+                    "pending": True
+                }
+            logger.error(f"Error getting transaction status for {tx_hash}: {e}")
+            return {
+                "mined": False,
+                "error": str(e)
+            }
+    
+    def is_asset_registered(self, token_id: int) -> bool:
+        """
+        Check if a token is registered in SmartRentHub
+        
+        Returns: True if registered, False otherwise
+        """
+        try:
+            if not self.contract:
+                return False
+            
+            # Call getAsset(tokenId) - returns AssetInfo struct
+            asset_info = self.contract.functions.getAsset(token_id).call()
+            
+            # AssetInfo struct: (tokenId, metadataURI, totalShares, createdAt, exists)
+            # Check exists field (index 4)
+            return asset_info[4] if isinstance(asset_info, (list, tuple)) and len(asset_info) > 4 else False
+            
+        except Exception as e:
+            logger.error(f"Error checking if asset {token_id} is registered: {e}")
+            return False
+    
+    def prepare_register_asset(self, token_id: int, owner: str) -> Dict:
+        """
+        Prepare registerAsset transaction for a token that exists in Building1122
+        but not in SmartRentHub
+        
+        This requires calling Building1122 to get token details first
+        """
+        try:
+            if not self.building_address:
+                return {"success": False, "error": "Building1122 address not set"}
+            
+            # Load Building1122 ABI and contract
+            building_abi = self._load_building_abi()
+            if not building_abi:
+                return {"success": False, "error": "Building1122 ABI not found"}
+            
+            building_contract = self.w3.eth.contract(
+                address=Web3.to_checksum_address(self.building_address),
+                abi=building_abi
+            )
+            
+            # Get token details from Building1122
+            total_supply = building_contract.functions.totalSupply(token_id).call()
+            metadata_uri = building_contract.functions.assetMetadataURI(token_id).call()
+            
+            if total_supply == 0:
+                return {"success": False, "error": f"Token {token_id} does not exist in Building1122"}
+            
+            # Encode registerAsset(tokenId, initialOwner, totalShares, metadataURI)
+            function_data = self.contract.encodeABI(
+                fn_name="registerAsset",
+                args=[token_id, Web3.to_checksum_address(owner), total_supply, metadata_uri]
+            )
+            
+            return {
+                "success": True,
+                "contract_address": self.contract_address,
+                "function_data": function_data.hex() if isinstance(function_data, bytes) else function_data,
+                "gas_estimate": "0.01 POL",
+                "token_id": token_id,
+                "total_supply": total_supply
+            }
+            
+        except Exception as e:
+            logger.error(f"Error preparing register asset for token {token_id}: {e}")
+            return {"success": False, "error": str(e)}
 
 
 # Singleton instance

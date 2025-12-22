@@ -918,3 +918,131 @@ async def prepare_buy_listing(request: BuyListingRequest):
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=str(e)
         )
+
+
+@router.get("/approval/check/{wallet_address}")
+async def check_approval(wallet_address: str):
+    """
+    Check if wallet has approved SmartRentHub to transfer their Building1122 tokens
+    
+    Returns: { "is_approved": bool }
+    """
+    try:
+        is_approved = smartrenthub_service.check_approval(wallet_address)
+        return {
+            "is_approved": is_approved,
+            "wallet_address": wallet_address,
+            "smartrenthub_address": smartrenthub_service.contract_address
+        }
+    except Exception as e:
+        logger.error(f"Error checking approval: {e}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=str(e)
+        )
+
+
+@router.post("/approval/prepare")
+async def prepare_approval():
+    """
+    Prepare setApprovalForAll transaction for user to sign
+    
+    This allows SmartRentHub to transfer user's Building1122 tokens (needed for listings)
+    """
+    try:
+        result = smartrenthub_service.prepare_approval(approved=True)
+        
+        if not result["success"]:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=result.get("error", "Failed to prepare approval")
+            )
+        
+        return {
+            **result,
+            "message": "Transaction prepared. User must sign to approve SmartRentHub.",
+            "note": "This is a one-time approval. After this, you can create listings without approving again."
+        }
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error preparing approval: {e}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=str(e)
+        )
+
+
+@router.get("/transaction/status/{tx_hash}")
+async def get_transaction_status(tx_hash: str):
+    """
+    Check if a transaction has been mined and was successful
+    
+    Returns: {
+        "mined": bool,
+        "success": bool (only if mined),
+        "block_number": int (only if mined)
+    }
+    """
+    try:
+        status_info = smartrenthub_service.get_transaction_status(tx_hash)
+        return status_info
+    except Exception as e:
+        logger.error(f"Error getting transaction status: {e}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=str(e)
+        )
+
+
+@router.get("/assets/{token_id}/is-registered")
+async def check_asset_registered(token_id: int):
+    """
+    Check if a token is registered in SmartRentHub
+    
+    Returns: { "is_registered": bool, "token_id": int }
+    """
+    try:
+        is_registered = smartrenthub_service.is_asset_registered(token_id)
+        return {
+            "is_registered": is_registered,
+            "token_id": token_id
+        }
+    except Exception as e:
+        logger.error(f"Error checking if asset {token_id} is registered: {e}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=str(e)
+        )
+
+
+@router.post("/assets/prepare-register")
+async def prepare_register_asset(token_id: int, owner: str):
+    """
+    Prepare registerAsset transaction for a token that exists in Building1122
+    but not in SmartRentHub
+    
+    This is needed for tokens minted before SmartRentHub was set up
+    """
+    try:
+        result = smartrenthub_service.prepare_register_asset(token_id, owner)
+        
+        if not result["success"]:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=result.get("error", "Failed to prepare asset registration")
+            )
+        
+        return {
+            **result,
+            "message": "Transaction prepared. User must sign to register asset in SmartRentHub."
+        }
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error preparing asset registration: {e}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=str(e)
+        )
