@@ -53,8 +53,8 @@ class Web3Service:
     def _load_contract_abi(self, contract_name: str) -> List:
         """Load contract ABI from abis folder"""
         try:
-            # Try new path first (abis folder - directly generated ABIs)
-            abi_path = Path(__file__).parent.parent.parent.parent / "blockchain" / "abis" / f"{contract_name}.json"
+            # Try backend/abis folder first (for Docker deployment)
+            abi_path = Path(__file__).parent.parent.parent / "abis" / f"{contract_name}.json"
             
             if abi_path.exists():
                 with open(abi_path, 'r') as f:
