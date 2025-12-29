@@ -6,8 +6,8 @@ pydantic>=2.7.0
 pydantic-settings>=2.1.0
 
 # Web3 and Blockchain
-web3==6.15.0
-eth-account==0.11.0
+web3>=6.17.0
+eth-account>=0.11.0
 siwe==4.0.0
 PyJWT==2.8.0
 
