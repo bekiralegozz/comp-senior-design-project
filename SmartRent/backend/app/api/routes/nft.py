@@ -13,17 +13,13 @@ from pathlib import Path
 from app.services.web3_service import web3_service
 from app.services.ipfs_service import ipfs_service
 from app.services.smartrenthub_service import smartrenthub_service
-# DEPRECATED: alchemy_service - now using SmartRentHub for on-chain data
-
-# DEPRECATED: Supabase auth removed, SIWE coming in Faz 2
-# from app.core.security import get_current_user
 
 logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/api/v1/nft", tags=["NFT"])
 
-# Token cache file path
-TOKEN_CACHE_FILE = Path(__file__).parent.parent.parent.parent / "data" / "minted_tokens.json"
+# Token cache file path (in backend data directory)
+TOKEN_CACHE_FILE = Path(__file__).parent.parent.parent.parent / "cache" / "minted_tokens.json"
 
 # Helper functions for token caching
 def _load_minted_tokens() -> Set[int]:
