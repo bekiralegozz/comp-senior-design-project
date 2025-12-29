@@ -20,7 +20,6 @@ from app.core.siwe_auth import (
     generate_nonce,
     verify_nonce_and_signature,
     create_jwt_token,
-    verify_jwt_token,
     get_address_from_token
 )
 from app.core.security import extract_bearer_token

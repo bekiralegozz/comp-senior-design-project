@@ -2,10 +2,9 @@
   "name": "smartrent-blockchain",
   "version": "1.0.0",
   "description": "SmartRent Smart Contracts",
-  "type": "module",
   "scripts": {
-    "compile": "hardhat compile",
-    "deploy": "hardhat run scripts/deploy.js --network polygon"
+    "compile": "hardhat compile --config hardhat.config.cjs",
+    "deploy": "hardhat run scripts/deploy.js --network polygon --config hardhat.config.cjs"
   },
   "keywords": [
     "blockchain",
