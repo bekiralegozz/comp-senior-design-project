@@ -3,7 +3,7 @@ import 'package:flutter/material.dart';
 /// Application configuration constants
 class AppConfig {
   // API Configuration
-  static const String baseUrl = 'http://localhost:8000';
+  static const String baseUrl = 'https://lucky-beauty-production-e86e.up.railway.app';
   static const String apiVersion = 'v1';
   static const String apiBaseUrl = '$baseUrl/api/$apiVersion';
   
