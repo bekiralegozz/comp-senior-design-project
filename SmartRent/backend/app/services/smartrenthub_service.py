@@ -276,11 +276,12 @@ class SmartRentHubService:
             # Convert POL to wei
             price_wei = self.w3.to_wei(price_per_share_pol, 'ether')
             
-            # Encode function data
-            function_data = self.contract.encodeABI(
-                fn_name="createListing",
-                args=[token_id, shares_for_sale, price_wei]
-            )
+            # Encode function data using Web3.py's correct method
+            function_data = self.contract.functions.createListing(
+                token_id, 
+                shares_for_sale, 
+                price_wei
+            )._encode_transaction_data()
             
             return {
                 "success": True,
@@ -299,10 +300,10 @@ class SmartRentHubService:
             if not self.contract:
                 return {"success": False, "error": "Contract not initialized"}
             
-            function_data = self.contract.encodeABI(
-                fn_name="cancelListing",
-                args=[listing_id]
-            )
+            # Encode function data using Web3.py's correct method
+            function_data = self.contract.functions.cancelListing(
+                listing_id
+            )._encode_transaction_data()
             
             return {
                 "success": True,
@@ -333,10 +334,11 @@ class SmartRentHubService:
             # Calculate total value to send
             total_value_wei = shares_to_buy * price_per_share_wei
             
-            function_data = self.contract.encodeABI(
-                fn_name="buyFromListing",
-                args=[listing_id, shares_to_buy]
-            )
+            # Encode function data using Web3.py's correct method
+            function_data = self.contract.functions.buyFromListing(
+                listing_id, 
+                shares_to_buy
+            )._encode_transaction_data()
             
             return {
                 "success": True,
@@ -433,11 +435,11 @@ class SmartRentHubService:
                 abi=building_abi
             )
             
-            # Encode setApprovalForAll(operator, approved)
-            function_data = building_contract.encodeABI(
-                fn_name="setApprovalForAll",
-                args=[Web3.to_checksum_address(self.contract_address), approved]
-            )
+            # Encode setApprovalForAll(operator, approved) using Web3.py's correct method
+            function_data = building_contract.functions.setApprovalForAll(
+                Web3.to_checksum_address(self.contract_address), 
+                approved
+            )._encode_transaction_data()
             
             return {
                 "success": True,
@@ -563,11 +565,13 @@ class SmartRentHubService:
             if total_supply == 0:
                 return {"success": False, "error": f"Token {token_id} does not exist in Building1122"}
             
-            # Encode registerAsset(tokenId, initialOwner, totalShares, metadataURI)
-            function_data = self.contract.encodeABI(
-                fn_name="registerAsset",
-                args=[token_id, Web3.to_checksum_address(owner), total_supply, metadata_uri]
-            )
+            # Encode registerAsset(tokenId, initialOwner, totalShares, metadataURI) using Web3.py's correct method
+            function_data = self.contract.functions.registerAsset(
+                token_id, 
+                Web3.to_checksum_address(owner), 
+                total_supply, 
+                metadata_uri
+            )._encode_transaction_data()
             
             return {
                 "success": True,

@@ -1,13 +1,17 @@
 {
-  "smartRentHub": "0xE579A3e8D770A5C52CCa1C2c08Ab1547757Be6D9",
-  "building1122": "0xC37a4625641A8481127A3F129c8985857ee92CaB",
-  "rentalManager": "0x7732B578B9CF47D4B725B54F6db43cBf51945E46",
-  "deployer": "0x7dCC13517a1f9238FA532629341cBFac5B9d8838",
+  "smartRentHub": "0xA3602c0548c771e787AaEEDFFcda28147F4FA615",
+  "building1122": "0x1179c6722cBEdB2bdF38FE1B3103edDa341523DC",
+  "rentalManager": "0xD10fcf5dC4188C688634865b6A89776b9ED57358",
+  "deployer": "0x6E7656C498439FB957b39140B7e6D42e5F67021c",
   "network": "polygon",
   "chainId": 137,
-  "deployedAt": "2025-12-18T15:29:13.273Z",
+  "deployedAt": "2025-12-29T20:23:54.137Z",
   "crossReferences": {
-    "Building1122.smartRentHub": "0xE579A3e8D770A5C52CCa1C2c08Ab1547757Be6D9",
-    "SmartRentHub.buildingToken": "0xC37a4625641A8481127A3F129c8985857ee92CaB"
-  }
+    "Building1122.smartRentHub": "0xA3602c0548c771e787AaEEDFFcda28147F4FA615",
+    "SmartRentHub.buildingToken": "0x1179c6722cBEdB2bdF38FE1B3103edDa341523DC",
+    "RentalHub.buildingToken": "0x1179c6722cBEdB2bdF38FE1B3103edDa341523DC",
+    "RentalHub.smartRentHub": "0xA3602c0548c771e787AaEEDFFcda28147F4FA615"
+  },
+  "rentalHub": "0xF676801212c3394e10Ad14319ca09f505E9D2A41",
+  "rentalHubDeployedAt": "2025-12-29T20:24:57.813Z"
 }

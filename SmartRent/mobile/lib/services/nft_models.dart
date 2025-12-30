@@ -72,6 +72,10 @@ class UserNftHolding {
   final int totalShares;
   final double ownershipPercentage;
   final String estimatedValue;
+  final bool isTopShareholder;
+  final String location;
+  final String activeDays;
+  final Map<String, dynamic> attributes;
 
   UserNftHolding({
     required this.tokenId,
@@ -81,11 +85,32 @@ class UserNftHolding {
     required this.totalShares,
     required this.ownershipPercentage,
     this.estimatedValue = '0',
+    this.isTopShareholder = false,
+    this.location = '',
+    this.activeDays = '',
+    this.attributes = const {},
   });
 
   factory UserNftHolding.fromJson(Map<String, dynamic> json) {
     final shares = json['shares'] ?? json['balance'] ?? 0;
     final totalShares = json['total_shares'] ?? json['totalShares'] ?? 1;
+    final attributes = (json['attributes'] as Map<String, dynamic>?) ?? {};
+    
+    // Extract location and activeDays from attributes
+    String location = '';
+    String activeDays = '';
+    
+    if (attributes.isNotEmpty) {
+      // Try to find location trait
+      location = attributes['location']?.toString() ?? 
+                 attributes['Location']?.toString() ?? 
+                 attributes['address']?.toString() ?? '';
+      
+      // Try to find active days trait
+      activeDays = attributes['active_days']?.toString() ?? 
+                   attributes['Active Days']?.toString() ?? 
+                   attributes['activeDays']?.toString() ?? '';
+    }
 
     return UserNftHolding(
       tokenId: json['token_id'] ?? 0,
@@ -95,6 +120,10 @@ class UserNftHolding {
       totalShares: totalShares,
       ownershipPercentage: (shares / totalShares) * 100,
       estimatedValue: json['estimated_value'] ?? '0',
+      isTopShareholder: json['is_top_shareholder'] ?? false,
+      location: location,
+      activeDays: activeDays,
+      attributes: attributes,
     );
   }
 }

@@ -7,6 +7,8 @@ import '../constants/config.dart';
 import '../services/models.dart';
 import '../services/api_service.dart';
 import '../services/wallet_service.dart';
+import '../services/rental_service.dart';
+import '../services/rental_models.dart';
 import '../components/asset_card.dart';
 import '../components/wallet_info_widget.dart';
 import '../core/providers/auth_provider.dart';
@@ -38,11 +40,16 @@ class _HomeScreenState extends ConsumerState<HomeScreen> with SingleTickerProvid
   SortBy? _sortBy;
   bool _filterAffordable = false;
   bool _filterMyListings = false;
+  
+  // Rental service and state
+  final _rentalService = RentalService();
+  List<RentalListing> _rentalListings = [];
+  bool _isLoadingRentals = false;
 
   @override
   void initState() {
     super.initState();
-    _tabController = TabController(length: 2, vsync: this);
+    _tabController = TabController(length: 3, vsync: this);
   }
 
   @override
@@ -90,6 +97,10 @@ class _HomeScreenState extends ConsumerState<HomeScreen> with SingleTickerProvid
             Tab(
               icon: Icon(Icons.storefront_outlined),
               text: 'Marketplace',
+            ),
+            Tab(
+              icon: Icon(Icons.key_outlined),
+              text: 'Rentplace',
             ),
           ],
         ),
@@ -229,8 +240,10 @@ class _HomeScreenState extends ConsumerState<HomeScreen> with SingleTickerProvid
               ),
             ),
           ),
-          // Marketplace Tab (Coming Soon)
+          // Marketplace Tab
           _buildMarketplaceTab(theme),
+          // Rentplace Tab
+          _buildRentplaceTab(theme),
         ],
       ),
     );
@@ -1889,6 +1902,649 @@ class _HomeScreenState extends ConsumerState<HomeScreen> with SingleTickerProvid
           ),
         );
       }
+    }
+  }
+  
+  // ============================================
+  // RENTAL FUNCTIONS
+  // ============================================
+  
+  Future<void> _loadRentalListings() async {
+    setState(() {
+      _isLoadingRentals = true;
+    });
+    
+    try {
+      final listings = await _rentalService.getAllRentalListings();
+      setState(() {
+        _rentalListings = listings;
+        _isLoadingRentals = false;
+      });
+    } catch (e) {
+      print('Error loading rental listings: $e');
+      setState(() {
+        _isLoadingRentals = false;
+      });
+    }
+  }
+
+  Widget _buildRentplaceTab(ThemeData theme) {
+    // Load rentals if not loaded yet
+    if (_rentalListings.isEmpty && !_isLoadingRentals) {
+      _loadRentalListings();
+    }
+    
+    return RefreshIndicator(
+      onRefresh: _loadRentalListings,
+      child: SingleChildScrollView(
+        physics: const AlwaysScrollableScrollPhysics(),
+        padding: const EdgeInsets.all(AppSpacing.md),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            // Header with back button
+            Row(
+              children: [
+                IconButton(
+                  icon: const Icon(Icons.arrow_back),
+                  onPressed: () {
+                    _tabController.animateTo(0); // Go back to Home tab
+                  },
+                ),
+                Text(
+                  'Rent Properties',
+                  style: theme.textTheme.headlineSmall?.copyWith(
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: AppSpacing.lg),
+            
+            // Info Banner
+            Container(
+              padding: const EdgeInsets.all(AppSpacing.lg),
+              decoration: BoxDecoration(
+                gradient: LinearGradient(
+                  colors: [
+                    Colors.orange.withOpacity(0.1),
+                    Colors.deepOrange.withOpacity(0.1),
+                  ],
+                  begin: Alignment.topLeft,
+                  end: Alignment.bottomRight,
+                ),
+                borderRadius: BorderRadius.circular(AppRadius.md),
+                border: Border.all(
+                  color: Colors.orange.withOpacity(0.3),
+                  width: 2,
+                ),
+              ),
+              child: Row(
+                children: [
+                  Icon(
+                    Icons.info_outline,
+                    color: Colors.orange[700],
+                    size: 40,
+                  ),
+                  const SizedBox(width: AppSpacing.md),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          'Rental Marketplace',
+                          style: theme.textTheme.titleMedium?.copyWith(
+                            fontWeight: FontWeight.bold,
+                            color: Colors.orange[900],
+                          ),
+                        ),
+                        const SizedBox(height: AppSpacing.xs),
+                        Text(
+                          'Browse and rent properties directly from NFT holders',
+                          style: theme.textTheme.bodyMedium?.copyWith(
+                            color: Colors.orange[800],
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            const SizedBox(height: AppSpacing.xl),
+            
+            // Rental Listings Section
+            if (_isLoadingRentals)
+              const Center(
+                child: Padding(
+                  padding: EdgeInsets.all(AppSpacing.xl),
+                  child: CircularProgressIndicator(),
+                ),
+              )
+            else if (_rentalListings.isEmpty)
+              Center(
+                child: Padding(
+                  padding: const EdgeInsets.all(AppSpacing.xl),
+                  child: Column(
+                    children: [
+                      Icon(
+                        Icons.home_outlined,
+                        size: 80,
+                        color: Colors.grey[400],
+                      ),
+                      const SizedBox(height: AppSpacing.lg),
+                      Text(
+                        'No Rentals Available',
+                        style: theme.textTheme.titleLarge?.copyWith(
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
+                      const SizedBox(height: AppSpacing.sm),
+                      Text(
+                        'Be the first to list your property for rent!',
+                        style: theme.textTheme.bodyMedium?.copyWith(
+                          color: AppColors.grey,
+                        ),
+                        textAlign: TextAlign.center,
+                      ),
+                    ],
+                  ),
+                ),
+              )
+            else
+              GridView.builder(
+                shrinkWrap: true,
+                physics: const NeverScrollableScrollPhysics(),
+                gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+                  crossAxisCount: 2,
+                  childAspectRatio: 0.75,
+                  crossAxisSpacing: AppSpacing.md,
+                  mainAxisSpacing: AppSpacing.md,
+                ),
+                itemCount: _rentalListings.length,
+                itemBuilder: (context, index) {
+                  final listing = _rentalListings[index];
+                  return _buildRentalListingCard(listing, theme);
+                },
+              ),
+          ],
+        ),
+      ),
+    );
+  }
+  
+  Widget _buildRentalListingCard(RentalListing listing, ThemeData theme) {
+    final imageUrl = listing.imageUrl ?? '';
+    final propertyName = listing.propertyName ?? 'Property #${listing.tokenId}';
+    
+    // Check if this is user's listing
+    final walletState = ref.watch(walletProvider);
+    final userAddress = walletState.address?.toLowerCase() ?? '';
+    final isMyListing = userAddress.isNotEmpty && listing.owner.toLowerCase() == userAddress;
+    
+    return Card(
+      clipBehavior: Clip.antiAlias,
+      elevation: 2,
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(AppRadius.md),
+      ),
+      child: InkWell(
+        onTap: () {
+          // TODO: Navigate to rental detail screen
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text('Rental details coming soon!'),
+              duration: Duration(seconds: 2),
+            ),
+          );
+        },
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            // Property Image
+            AspectRatio(
+              aspectRatio: 16 / 9,
+              child: imageUrl.isNotEmpty
+                  ? Image.network(
+                      imageUrl,
+                      fit: BoxFit.cover,
+                      errorBuilder: (context, error, stackTrace) {
+                        return Container(
+                          color: Colors.grey[200],
+                          child: const Icon(
+                            Icons.home,
+                            size: 48,
+                            color: Colors.grey,
+                          ),
+                        );
+                      },
+                    )
+                  : Container(
+                      color: Colors.grey[200],
+                      child: const Icon(
+                        Icons.home,
+                        size: 48,
+                        color: Colors.grey,
+                      ),
+                    ),
+            ),
+            
+            // Property Info
+            Expanded(
+              child: Padding(
+                padding: const EdgeInsets.all(AppSpacing.sm),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    // Property Name
+                    Text(
+                      propertyName,
+                      style: theme.textTheme.titleSmall?.copyWith(
+                        fontWeight: FontWeight.bold,
+                      ),
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                    const SizedBox(height: AppSpacing.xs),
+                    
+                    // Price per night
+                    Row(
+                      children: [
+                        Icon(
+                          Icons.nights_stay,
+                          size: 16,
+                          color: Colors.orange[700],
+                        ),
+                        const SizedBox(width: 4),
+                        Text(
+                          '${double.tryParse(listing.pricePerNight)?.toStringAsFixed(4) ?? '0.0000'} POL/night',
+                          style: theme.textTheme.bodyMedium?.copyWith(
+                            color: Colors.orange[700],
+                            fontWeight: FontWeight.w600,
+                          ),
+                        ),
+                      ],
+                    ),
+                    
+                    // Location
+                    if (listing.location != null && listing.location!.isNotEmpty) ...[
+                      const SizedBox(height: 4),
+                      Row(
+                        children: [
+                          Icon(
+                            Icons.location_on,
+                            size: 14,
+                            color: Colors.grey[600],
+                          ),
+                          const SizedBox(width: 4),
+                          Expanded(
+                            child: Text(
+                              listing.location!,
+                              style: theme.textTheme.bodySmall?.copyWith(
+                                color: Colors.grey[700],
+                              ),
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ],
+                    
+                    // Active Days
+                    if (listing.activeDays != null && listing.activeDays!.isNotEmpty) ...[
+                      const SizedBox(height: 4),
+                      Row(
+                        children: [
+                          Icon(
+                            Icons.calendar_today,
+                            size: 14,
+                            color: Colors.grey[600],
+                          ),
+                          const SizedBox(width: 4),
+                          Expanded(
+                            child: Text(
+                              listing.activeDays!,
+                              style: theme.textTheme.bodySmall?.copyWith(
+                                color: Colors.grey[700],
+                              ),
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ],
+                    
+                    const Spacer(),
+                    
+                    // Buttons - different for owner vs renter
+                    if (isMyListing)
+                      // Owner buttons: Edit & Remove
+                      Row(
+                        children: [
+                          Expanded(
+                            child: OutlinedButton.icon(
+                              onPressed: () => _editRentalListing(listing),
+                              icon: const Icon(Icons.edit, size: 14),
+                              label: const Text('Edit', style: TextStyle(fontSize: 12)),
+                              style: OutlinedButton.styleFrom(
+                                padding: const EdgeInsets.symmetric(vertical: 8),
+                              ),
+                            ),
+                          ),
+                          const SizedBox(width: 6),
+                          Expanded(
+                            child: ElevatedButton.icon(
+                              onPressed: () => _removeRentalListing(listing),
+                              icon: const Icon(Icons.delete, size: 14),
+                              label: const Text('Remove', style: TextStyle(fontSize: 12)),
+                              style: ElevatedButton.styleFrom(
+                                backgroundColor: Colors.red,
+                                padding: const EdgeInsets.symmetric(vertical: 8),
+                              ),
+                            ),
+                          ),
+                        ],
+                      )
+                    else
+                      // Renter button: Book Now
+                      SizedBox(
+                        width: double.infinity,
+                        child: ElevatedButton(
+                          onPressed: () {
+                            // TODO: Navigate to booking screen
+                            ScaffoldMessenger.of(context).showSnackBar(
+                              const SnackBar(
+                                content: Text('Booking feature coming soon!'),
+                                duration: Duration(seconds: 2),
+                              ),
+                            );
+                          },
+                          style: ElevatedButton.styleFrom(
+                            backgroundColor: Colors.orange,
+                            padding: const EdgeInsets.symmetric(vertical: 8),
+                          ),
+                          child: const Text(
+                            'Book Now',
+                            style: TextStyle(fontSize: 12),
+                          ),
+                        ),
+                      ),
+                  ],
+                ),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  // ============================================
+  // RENTAL LISTING MANAGEMENT
+  // ============================================
+  
+  Future<void> _editRentalListing(RentalListing listing) async {
+    final priceController = TextEditingController(text: listing.pricePerNight);
+    
+    final result = await showDialog<double>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: Row(
+          children: [
+            Icon(Icons.edit, color: Colors.orange[700]),
+            const SizedBox(width: 8),
+            const Text('Edit Rental Price'),
+          ],
+        ),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              listing.propertyName ?? 'Property #${listing.tokenId}',
+              style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
+            ),
+            const SizedBox(height: 8),
+            Text('Current price: ${double.tryParse(listing.pricePerNight)?.toStringAsFixed(4) ?? '0.0000'} POL/night'),
+            const SizedBox(height: 16),
+            TextField(
+              controller: priceController,
+              keyboardType: const TextInputType.numberWithOptions(decimal: true),
+              decoration: InputDecoration(
+                labelText: 'New Price per Night',
+                hintText: 'e.g. 0.5',
+                prefixIcon: const Icon(Icons.attach_money),
+                suffixText: 'POL',
+                border: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(8),
+                ),
+              ),
+            ),
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('Cancel'),
+          ),
+          ElevatedButton(
+            onPressed: () {
+              final priceText = priceController.text.trim();
+              final price = double.tryParse(priceText);
+              if (price == null || price <= 0) {
+                ScaffoldMessenger.of(context).showSnackBar(
+                  const SnackBar(
+                    content: Text('Please enter a valid price'),
+                    backgroundColor: Colors.red,
+                  ),
+                );
+                return;
+              }
+              Navigator.pop(context, price);
+            },
+            style: ElevatedButton.styleFrom(backgroundColor: Colors.orange),
+            child: const Text('Update'),
+          ),
+        ],
+      ),
+    );
+    
+    if (result != null && mounted) {
+      await _processEditRentalListing(listing, result);
+    }
+  }
+  
+  Future<void> _processEditRentalListing(RentalListing listing, double newPrice) async {
+    try {
+      final walletService = ref.read(walletServiceProvider);
+      final walletState = ref.read(walletProvider);
+      final walletAddress = walletState.address;
+      
+      if (walletAddress == null) {
+        throw Exception('Wallet not connected');
+      }
+      
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Updating rental listing...'),
+            duration: Duration(seconds: 2),
+          ),
+        );
+      }
+      
+      // Step 1: Cancel old listing
+      final cancelData = await _rentalService.prepareCancelRentalListing(listing.listingId);
+      
+      if (cancelData['success'] != true) {
+        throw Exception(cancelData['error'] ?? 'Failed to prepare cancel');
+      }
+      
+      final cancelTxHash = await walletService.sendTransaction(
+        to: cancelData['contract_address'],
+        value: EtherAmount.zero(),
+        data: cancelData['function_data'].startsWith('0x') 
+            ? cancelData['function_data'] 
+            : '0x${cancelData['function_data']}',
+        gas: 300000,
+      );
+      
+      if (!mounted) return;
+      
+      // Wait a bit for transaction to be mined
+      await Future.delayed(const Duration(seconds: 3));
+      
+      // Step 2: Create new listing with new price
+      final createData = await _rentalService.prepareCreateRentalListing(
+        tokenId: listing.tokenId,
+        pricePerNightPol: newPrice,
+        ownerAddress: walletAddress,
+      );
+      
+      if (createData['success'] != true) {
+        throw Exception(createData['error'] ?? 'Failed to prepare new listing');
+      }
+      
+      final createTxHash = await walletService.sendTransaction(
+        to: createData['contract_address'],
+        value: EtherAmount.zero(),
+        data: createData['function_data'].startsWith('0x') 
+            ? createData['function_data'] 
+            : '0x${createData['function_data']}',
+        gas: 500000,
+      );
+      
+      if (!mounted) return;
+      
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            '✅ Rental listing updated!\n'
+            'New price: $newPrice POL/night',
+          ),
+          backgroundColor: Colors.green,
+          duration: const Duration(seconds: 5),
+        ),
+      );
+      
+      // Refresh listings
+      await _loadRentalListings();
+      
+    } catch (e) {
+      if (!mounted) return;
+      
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('❌ Failed to update listing: $e'),
+          backgroundColor: Colors.red,
+          duration: const Duration(seconds: 5),
+        ),
+      );
+    }
+  }
+  
+  Future<void> _removeRentalListing(RentalListing listing) async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: Row(
+          children: [
+            Icon(Icons.warning, color: Colors.red[700]),
+            const SizedBox(width: 8),
+            const Text('Remove Rental Listing'),
+          ],
+        ),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              'Are you sure you want to remove this listing?',
+              style: const TextStyle(fontWeight: FontWeight.bold),
+            ),
+            const SizedBox(height: 8),
+            Text(listing.propertyName ?? 'Property #${listing.tokenId}'),
+            Text('Price: ${double.tryParse(listing.pricePerNight)?.toStringAsFixed(4) ?? '0.0000'} POL/night'),
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context, false),
+            child: const Text('Cancel'),
+          ),
+          ElevatedButton(
+            onPressed: () => Navigator.pop(context, true),
+            style: ElevatedButton.styleFrom(backgroundColor: Colors.red),
+            child: const Text('Remove'),
+          ),
+        ],
+      ),
+    );
+    
+    if (confirmed == true && mounted) {
+      await _processRemoveRentalListing(listing);
+    }
+  }
+  
+  Future<void> _processRemoveRentalListing(RentalListing listing) async {
+    try {
+      final walletService = ref.read(walletServiceProvider);
+      final walletState = ref.read(walletProvider);
+      final walletAddress = walletState.address;
+      
+      if (walletAddress == null) {
+        throw Exception('Wallet not connected');
+      }
+      
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Removing rental listing...'),
+            duration: Duration(seconds: 2),
+          ),
+        );
+      }
+      
+      final cancelData = await _rentalService.prepareCancelRentalListing(listing.listingId);
+      
+      if (cancelData['success'] != true) {
+        throw Exception(cancelData['error'] ?? 'Failed to prepare cancel');
+      }
+      
+      final txHash = await walletService.sendTransaction(
+        to: cancelData['contract_address'],
+        value: EtherAmount.zero(),
+        data: cancelData['function_data'].startsWith('0x') 
+            ? cancelData['function_data'] 
+            : '0x${cancelData['function_data']}',
+        gas: 300000,
+      );
+      
+      if (!mounted) return;
+      
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('✅ Rental listing removed!\nTX: ${txHash.substring(0, 10)}...'),
+          backgroundColor: Colors.green,
+          duration: const Duration(seconds: 5),
+        ),
+      );
+      
+      // Refresh listings
+      await _loadRentalListings();
+      
+    } catch (e) {
+      if (!mounted) return;
+      
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('❌ Failed to remove listing: $e'),
+          backgroundColor: Colors.red,
+          duration: const Duration(seconds: 5),
+        ),
+      );
     }
   }
 

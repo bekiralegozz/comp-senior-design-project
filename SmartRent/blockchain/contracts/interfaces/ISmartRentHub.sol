@@ -34,5 +34,21 @@ interface ISmartRentHub {
         address to,
         uint256 amount
     ) external;
+    
+    /**
+     * @dev Get the top shareholder (highest balance holder) for an asset
+     * @param tokenId The asset token ID
+     * @return topHolder The address with the most shares
+     * @return topBalance The balance of the top holder
+     */
+    function getTopShareholder(uint256 tokenId) external view returns (address topHolder, uint256 topBalance);
+    
+    /**
+     * @dev Check if an address is the majority shareholder (has the most shares)
+     * @param account The address to check
+     * @param tokenId The asset token ID
+     * @return True if account has the highest balance, false otherwise
+     */
+    function isMajorityShareholder(address account, uint256 tokenId) external view returns (bool);
 }
 

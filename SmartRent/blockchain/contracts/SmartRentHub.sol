@@ -537,6 +537,47 @@ contract SmartRentHub is Ownable, ReentrancyGuard, Pausable {
         return _isOwner[tokenId][account];
     }
     
+    /**
+     * @dev Get the top shareholder (highest balance holder) for an asset
+     * @param tokenId The asset token ID
+     * @return topHolder The address with the most shares
+     * @return topBalance The balance of the top holder
+     */
+    function getTopShareholder(uint256 tokenId) public view returns (address topHolder, uint256 topBalance) {
+        require(assets[tokenId].exists, "SmartRentHub: asset does not exist");
+        require(buildingToken != address(0), "SmartRentHub: building token not set");
+        
+        address[] memory owners = _assetOwners[tokenId];
+        IERC1155 token = IERC1155(buildingToken);
+        
+        topHolder = address(0);
+        topBalance = 0;
+        
+        for (uint256 i = 0; i < owners.length; i++) {
+            uint256 balance = token.balanceOf(owners[i], tokenId);
+            if (balance > topBalance) {
+                topBalance = balance;
+                topHolder = owners[i];
+            }
+        }
+        
+        return (topHolder, topBalance);
+    }
+    
+    /**
+     * @dev Check if an address is the majority shareholder (has the most shares)
+     * @param account The address to check
+     * @param tokenId The asset token ID
+     * @return True if account has the highest balance, false otherwise
+     */
+    function isMajorityShareholder(address account, uint256 tokenId) public view returns (bool) {
+        require(assets[tokenId].exists, "SmartRentHub: asset does not exist");
+        require(buildingToken != address(0), "SmartRentHub: building token not set");
+        
+        (address topHolder, ) = getTopShareholder(tokenId);
+        return account == topHolder;
+    }
+    
     // ============================================
     // VIEW FUNCTIONS - MARKETPLACE
     // ============================================

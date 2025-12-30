@@ -19,10 +19,10 @@ class AppConfig {
   // WalletConnect Configuration
   static const String walletConnectProjectId = 'YOUR_WALLETCONNECT_PROJECT_ID';
   
-  // Contract Addresses - DEPLOYED ON POLYGON MAINNET (18 Aralık 2024 - SmartRentHub entegrasyonlu)
-  static const String building1122Contract = '0x6b9aa94207650AaeC4a89F6818c4E8791AF10ed3';
-  static const String smartRentHubContract = '0x6E5FF6db7cdB03881710A497e449274ab8c4a3d0';
-  static const String rentalManagerContract = '0x45FAd67F890a4154C5c83191231BD2E20048a729';
+  // Contract Addresses - DEPLOYED ON POLYGON MAINNET (29 Aralık 2024 - Majority Shareholder Fix)
+  static const String building1122Contract = '0x1179c6722cBEdB2bdF38FE1B3103edDa341523DC';
+  static const String smartRentHubContract = '0xA3602c0548c771e787AaEEDFFcda28147F4FA615';
+  static const String rentalManagerContract = '0xD10fcf5dC4188C688634865b6A89776b9ED57358';
   
   // Legacy contract names (for backward compatibility)
   static const String assetTokenContract = building1122Contract;
