@@ -111,7 +111,7 @@ async def prepare_rental_listing(request: PrepareRentalListingRequest):
     Prepare rental listing transaction for user to sign
     
     Flow:
-    1. Check if user is majority shareholder (>50% ownership)
+    1. Check if user is the top shareholder (highest balance)
     2. If yes, prepare transaction data
     3. Return encoded data for WalletConnect signing
     
@@ -132,7 +132,7 @@ async def prepare_rental_listing(request: PrepareRentalListingRequest):
         
         ownership_check = {
             "is_majority_shareholder": is_majority,
-            "required": ">50% ownership"
+            "required": "Top shareholder"
         }
         
         if not is_majority:
@@ -140,7 +140,7 @@ async def prepare_rental_listing(request: PrepareRentalListingRequest):
                 success=False,
                 is_majority_shareholder=False,
                 ownership_check=ownership_check,
-                message="Only majority shareholder (>50% ownership) can create rental listing",
+                message="Only the top shareholder (highest balance) can create rental listings",
                 error="Insufficient ownership"
             )
         
@@ -555,7 +555,7 @@ async def check_ownership(token_id: int, address: str):
             "address": address,
             "is_majority_shareholder": is_majority,
             "can_create_listing": is_majority,
-            "requirement": ">50% ownership required"
+            "requirement": "Top shareholder required"
         }
     except Exception as e:
         logger.error(f"Error checking ownership: {e}")

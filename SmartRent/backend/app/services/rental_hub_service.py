@@ -112,7 +112,7 @@ class RentalHubService:
                         "is_active": listing[5]
                     }
                     
-                    # Fetch NFT metadata for attributes
+                                    # Fetch NFT metadata for attributes
                     if smartrenthub_contract:
                         try:
                             # AssetInfo struct: (tokenId, metadataURI, totalShares, createdAt, exists)
@@ -125,10 +125,7 @@ class RentalHubService:
                                 if metadata_uri:
                                     try:
                                         # Convert IPFS to HTTP if needed
-                                        if metadata_uri.startswith("ipfs://"):
-                                            http_url = metadata_uri.replace("ipfs://", "https://ipfs.io/ipfs/")
-                                        else:
-                                            http_url = metadata_uri
+                                        http_url = self._resolve_ipfs_url(metadata_uri)
                                         
                                         # Synchronous call for metadata
                                         import requests
@@ -136,13 +133,17 @@ class RentalHubService:
                                         if response.status_code == 200:
                                             metadata = response.json()
                                             listing_dict['property_name'] = metadata.get('name', f'Property #{token_id}')
-                                            listing_dict['image_url'] = metadata.get('image', '')
+                                            
+                                            # Handle image URL (resolve IPFS)
+                                            raw_image = metadata.get('image', '')
+                                            listing_dict['image_url'] = self._resolve_ipfs_url(raw_image)
                                             
                                             # Parse attributes - can be array or dict
                                             attributes_raw = metadata.get('attributes', [])
+                                            attributes_dict = {}
+                                            
                                             if isinstance(attributes_raw, list):
                                                 # Convert array to dict for easier access
-                                                attributes_dict = {}
                                                 for attr in attributes_raw:
                                                     if isinstance(attr, dict) and 'trait_type' in attr and 'value' in attr:
                                                         # Normalize key to lowercase
@@ -150,7 +151,16 @@ class RentalHubService:
                                                         attributes_dict[key] = attr['value']
                                                 listing_dict['attributes'] = attributes_dict
                                             else:
-                                                listing_dict['attributes'] = attributes_raw
+                                                listing_dict['attributes'] = attributes_raw if isinstance(attributes_raw, dict) else {}
+                                                attributes_dict = listing_dict['attributes']
+                                                
+                                            # map common attributes to top-level keys if missing
+                                            if attributes_dict:
+                                                if 'location' in attributes_dict:
+                                                    listing_dict['location'] = attributes_dict['location']
+                                                if 'active_days' in attributes_dict:
+                                                    listing_dict['active_days'] = attributes_dict['active_days']
+                                                    
                                         else:
                                             logger.warning(f"Metadata fetch failed for token {token_id}: status {response.status_code}")
                                             listing_dict['property_name'] = f'Property #{token_id}'
@@ -170,6 +180,8 @@ class RentalHubService:
                             listing_dict['property_name'] = f'Property #{token_id}'
                             listing_dict['image_url'] = ''
                             listing_dict['attributes'] = {}
+            
+
                     
                     listings.append(listing_dict)
             
@@ -179,6 +191,20 @@ class RentalHubService:
             logger.error(f"Error getting rental listings: {e}")
             return []
     
+    def _resolve_ipfs_url(self, url: str) -> str:
+        """Resolve IPFS URI to HTTP URL using global gateway"""
+        if not url:
+            return ""
+        
+        # Strip potential quotes
+        url = url.strip().replace('"', '').replace("'", "")
+        
+        if url.startswith("ipfs://"):
+            # Use ipfs.io gateway (or another public gateway like dweb.link)
+            return url.replace("ipfs://", "https://ipfs.io/ipfs/")
+            
+        return url
+
     def _load_smartrenthub_abi(self) -> List:
         """Load SmartRentHub ABI"""
         try:
@@ -380,47 +406,22 @@ class RentalHubService:
     
     def is_majority_shareholder(self, address: str, token_id: int) -> bool:
         """
-        Check if address is the majority shareholder (>50% ownership)
+        Check if address is the top shareholder (highest balance holder)
         
-        This requires:
-        1. Getting all owners from SmartRentHub
-        2. Getting their balances from Building1122
-        3. Finding who has the most shares
+        This aligns with the RentalHub contract and mobile app design.
+        In fractional ownership, the top holder can manage the listing.
         
-        Returns: True if address owns >50% of shares
+        Returns: True if address is the top shareholder
         """
         try:
-            if not self.building_address or not self.smartrenthub_address:
-                logger.error("Building1122 or SmartRentHub address not set")
+            majority_holder = self.get_majority_shareholder(token_id)
+            if not majority_holder:
                 return False
             
-            # Load Building1122 ABI
-            building_abi = self._load_building_abi()
-            if not building_abi:
-                return False
-            
-            building_contract = self.w3.eth.contract(
-                address=Web3.to_checksum_address(self.building_address),
-                abi=building_abi
-            )
-            
-            # Get total supply
-            total_supply = building_contract.functions.totalSupply(token_id).call()
-            if total_supply == 0:
-                return False
-            
-            # Get user's balance
-            user_balance = building_contract.functions.balanceOf(
-                Web3.to_checksum_address(address),
-                token_id
-            ).call()
-            
-            # Check if >50%
-            ownership_percentage = (user_balance / total_supply) * 100
-            return ownership_percentage > 50.0
+            return majority_holder.lower() == address.lower()
             
         except Exception as e:
-            logger.error(f"Error checking majority shareholder for {address}, token {token_id}: {e}")
+            logger.error(f"Error checking top shareholder for {address}, token {token_id}: {e}")
             return False
     
     def get_majority_shareholder(self, token_id: int) -> Optional[str]:
