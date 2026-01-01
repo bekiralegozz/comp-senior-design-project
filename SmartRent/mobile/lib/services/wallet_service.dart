@@ -5,6 +5,7 @@ import 'package:walletconnect_flutter_v2/walletconnect_flutter_v2.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:url_launcher/url_launcher.dart';
 import '../constants/blockchain_config.dart';
+import '../constants/config.dart';
 
 /// Wallet Service - WalletConnect Integration
 /// Handles wallet connection, transaction signing, and blockchain interaction
@@ -43,7 +44,7 @@ class WalletService {
   Future<void> _initializeWalletConnect() async {
     try {
       _web3App = await Web3App.createInstance(
-        projectId: '17a60844bceaf7f347f653e3ead1c165',
+        projectId: AppConfig.walletConnectProjectId,
         metadata: const PairingMetadata(
           name: 'SmartRent',
           description: 'Decentralized Real Estate Rental Platform',
@@ -238,6 +239,34 @@ class WalletService {
 
     _currentSession = null;
     await _clearSession();
+  }
+
+  /// Force disconnect (Deep clean)
+  /// Useful for stuck sessions or connection issues
+  Future<void> forceDisconnect() async {
+    try {
+      if (_web3App != null) {
+        // Try to disconnect all sessions
+        final sessions = _web3App!.getActiveSessions();
+        for (final session in sessions.values) {
+          try {
+            await _web3App!.disconnectSession(
+              topic: session.topic,
+              reason: Errors.getSdkError(Errors.USER_DISCONNECTED),
+            );
+          } catch (e) {
+            print('Error disconnecting session ${session.topic}: $e');
+          }
+        }
+      }
+    } catch (e) {
+      print('Error during force disconnect: $e');
+    } finally {
+      _currentSession = null;
+      await _clearSession();
+      // Clear checking of initialization to force re-init if needed
+      _initialized = false;
+    }
   }
 
   /// Get latest WalletConnect URI (for QR code display)

@@ -17,7 +17,8 @@ class AppConfig {
   static const String currencySymbol = 'POL'; // Formerly MATIC, rebranded to POL
   
   // WalletConnect Configuration
-  static const String walletConnectProjectId = 'YOUR_WALLETCONNECT_PROJECT_ID';
+  // Get a free Project ID at https://cloud.reown.com
+  static const String walletConnectProjectId = '3e0da24c2709d25c98f4c2a187ffffa9';
   
   // Contract Addresses - DEPLOYED ON POLYGON MAINNET (29 Aralık 2024 - Majority Shareholder Fix)
   static const String building1122Contract = '0x1179c6722cBEdB2bdF38FE1B3103edDa341523DC';

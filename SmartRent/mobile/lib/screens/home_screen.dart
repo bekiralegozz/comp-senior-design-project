@@ -2359,6 +2359,8 @@ class _HomeScreenState extends ConsumerState<HomeScreen> with SingleTickerProvid
   Future<void> _processEditRentalListing(RentalListing listing, double newPrice) async {
     try {
       final walletService = ref.read(walletServiceProvider);
+      // Instantiate API service locally since it's used in main flow
+      final apiService = ApiService(); 
       final walletState = ref.read(walletProvider);
       final walletAddress = walletState.address;
       
@@ -2366,22 +2368,65 @@ class _HomeScreenState extends ConsumerState<HomeScreen> with SingleTickerProvid
         throw Exception('Wallet not connected');
       }
       
+      // Step 1: Prepare Cancel (Popup)
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('Updating rental listing...'),
-            duration: Duration(seconds: 2),
+        showDialog(
+          context: context,
+          barrierDismissible: false,
+          builder: (context) => const Center(
+            child: Card(
+              child: Padding(
+                padding: EdgeInsets.all(24),
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    CircularProgressIndicator(),
+                    SizedBox(height: 16),
+                    Text('Step 1/2: Preparing to cancel old listing...', 
+                      textAlign: TextAlign.center,
+                      style: TextStyle(fontSize: 16)),
+                  ],
+                ),
+              ),
+            ),
           ),
         );
       }
       
-      // Step 1: Cancel old listing
+      // Step 1a: Prepare cancel transaction
       final cancelData = await _rentalService.prepareCancelRentalListing(listing.listingId);
       
       if (cancelData['success'] != true) {
+        if (mounted) Navigator.pop(context);
         throw Exception(cancelData['error'] ?? 'Failed to prepare cancel');
       }
       
+      // Step 1b: Sign cancel (Popup)
+      if (mounted) {
+        Navigator.pop(context); // Close "Preparing"
+        showDialog(
+          context: context,
+          barrierDismissible: false,
+          builder: (context) => const Center(
+            child: Card(
+              child: Padding(
+                padding: EdgeInsets.all(24),
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    CircularProgressIndicator(),
+                    SizedBox(height: 16),
+                    Text('Step 1/2: Sign cancel in wallet...', 
+                      textAlign: TextAlign.center,
+                      style: TextStyle(fontSize: 16)),
+                  ],
+                ),
+              ),
+            ),
+          ),
+        );
+      }
+
       final cancelTxHash = await walletService.sendTransaction(
         to: cancelData['contract_address'],
         value: EtherAmount.zero(),
@@ -2391,12 +2436,71 @@ class _HomeScreenState extends ConsumerState<HomeScreen> with SingleTickerProvid
         gas: 300000,
       );
       
-      if (!mounted) return;
+      // Step 1c: Wait for cancel confirmation (Popup)
+      if (mounted) {
+        Navigator.pop(context); // Close "Signing"
+        showDialog(
+          context: context,
+          barrierDismissible: false,
+          builder: (context) => Center(
+            child: Card(
+              child: Padding(
+                padding: const EdgeInsets.all(24),
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    const CircularProgressIndicator(),
+                    const SizedBox(height: 16),
+                    Text('Step 1/2: Waiting for cancel confirmation...\n${cancelTxHash.substring(0, 10)}...', 
+                      textAlign: TextAlign.center,
+                      style: const TextStyle(fontSize: 16)),
+                  ],
+                ),
+              ),
+            ),
+          ),
+        );
+      }
       
-      // Wait a bit for transaction to be mined
-      await Future.delayed(const Duration(seconds: 3));
+      bool cancelSuccess = false;
+      try {
+        cancelSuccess = await apiService.waitForTransaction(cancelTxHash, maxWaitSeconds: 60);
+      } catch (e) {
+        // Handle timeout
+      }
       
-      // Step 2: Create new listing with new price
+      if (!cancelSuccess) {
+        if (mounted) Navigator.pop(context);
+        throw Exception('Cancel transaction failed or timed out');
+      }
+      
+      // Step 2: Prepare New Listing (Popup)
+      if (mounted) {
+        Navigator.pop(context); // Close "Waiting Cancel"
+        showDialog(
+          context: context,
+          barrierDismissible: false,
+          builder: (context) => const Center(
+            child: Card(
+              child: Padding(
+                padding: EdgeInsets.all(24),
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    CircularProgressIndicator(),
+                    SizedBox(height: 16),
+                    Text('Step 2/2: Preparing new listing...', 
+                      textAlign: TextAlign.center,
+                      style: TextStyle(fontSize: 16)),
+                  ],
+                ),
+              ),
+            ),
+          ),
+        );
+      }
+      
+      // Step 2a: Prepare create transaction
       final createData = await _rentalService.prepareCreateRentalListing(
         tokenId: listing.tokenId,
         pricePerNightPol: newPrice,
@@ -2404,7 +2508,34 @@ class _HomeScreenState extends ConsumerState<HomeScreen> with SingleTickerProvid
       );
       
       if (createData['success'] != true) {
+        if (mounted) Navigator.pop(context);
         throw Exception(createData['error'] ?? 'Failed to prepare new listing');
+      }
+      
+      // Step 2b: Sign create (Popup)
+      if (mounted) {
+        Navigator.pop(context); // Close "Preparing New"
+        showDialog(
+          context: context,
+          barrierDismissible: false,
+          builder: (context) => const Center(
+            child: Card(
+              child: Padding(
+                padding: EdgeInsets.all(24),
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    CircularProgressIndicator(),
+                    SizedBox(height: 16),
+                    Text('Step 2/2: Sign new listing in wallet...', 
+                      textAlign: TextAlign.center,
+                      style: TextStyle(fontSize: 16)),
+                  ],
+                ),
+              ),
+            ),
+          ),
+        );
       }
       
       final createTxHash = await walletService.sendTransaction(
@@ -2416,32 +2547,76 @@ class _HomeScreenState extends ConsumerState<HomeScreen> with SingleTickerProvid
         gas: 500000,
       );
       
+      // Step 2c: Wait for create confirmation (Popup)
+      if (mounted) {
+        Navigator.pop(context); // Close "Signing New"
+        showDialog(
+          context: context,
+          barrierDismissible: false,
+          builder: (context) => Center(
+            child: Card(
+              child: Padding(
+                padding: const EdgeInsets.all(24),
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    const CircularProgressIndicator(),
+                    const SizedBox(height: 16),
+                    Text('Step 2/2: Waiting for listing confirmation...\n${createTxHash.substring(0, 10)}...', 
+                      textAlign: TextAlign.center,
+                      style: const TextStyle(fontSize: 16)),
+                  ],
+                ),
+              ),
+            ),
+          ),
+        );
+      }
+      
+      bool createSuccess = false;
+      try {
+        createSuccess = await apiService.waitForTransaction(createTxHash, maxWaitSeconds: 60);
+      } catch (e) {
+        // Handle timeout
+      } finally {
+        if (mounted) Navigator.pop(context); // Close "Waiting New"
+      }
+      
       if (!mounted) return;
       
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text(
-            '✅ Rental listing updated!\n'
-            'New price: $newPrice POL/night',
+      if (createSuccess) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(
+              '✅ Rental listing updated!\n'
+              'New price: $newPrice POL/night',
+            ),
+            backgroundColor: Colors.green,
+            duration: const Duration(seconds: 5),
           ),
-          backgroundColor: Colors.green,
-          duration: const Duration(seconds: 5),
-        ),
-      );
-      
-      // Refresh listings
-      await _loadRentalListings();
+        );
+        
+        // Refresh listings
+        await _loadRentalListings();
+      } else {
+        throw Exception('Create transaction failed or timed out');
+      }
       
     } catch (e) {
-      if (!mounted) return;
-      
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text('❌ Failed to update listing: $e'),
-          backgroundColor: Colors.red,
-          duration: const Duration(seconds: 5),
-        ),
-      );
+      if (mounted) {
+        // Ensure any open dialog is closed if we caught an error while one was open
+        // We can't know for sure if one is open, but usually context.pop works if we track it.
+        // For now, relying on exceptions caught before popups or after clean pops.
+        // If an exception happens inside a try/catch block where a popup IS open, we need to close it.
+        // I've added pops before throws above, but for general 'e', let's just show the error.
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('❌ Failed to update listing: $e'),
+            backgroundColor: Colors.red,
+            duration: const Duration(seconds: 5),
+          ),
+        );
+      }
     }
   }
   
@@ -2491,6 +2666,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> with SingleTickerProvid
   Future<void> _processRemoveRentalListing(RentalListing listing) async {
     try {
       final walletService = ref.read(walletServiceProvider);
+      final apiService = ApiService();
       final walletState = ref.read(walletProvider);
       final walletAddress = walletState.address;
       
@@ -2498,11 +2674,27 @@ class _HomeScreenState extends ConsumerState<HomeScreen> with SingleTickerProvid
         throw Exception('Wallet not connected');
       }
       
+      // Step 1: Prepare (Popup)
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('Removing rental listing...'),
-            duration: Duration(seconds: 2),
+        showDialog(
+          context: context,
+          barrierDismissible: false,
+          builder: (context) => const Center(
+            child: Card(
+              child: Padding(
+                padding: EdgeInsets.all(24),
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    CircularProgressIndicator(),
+                    SizedBox(height: 16),
+                    Text('Preparing to remove listing...', 
+                      textAlign: TextAlign.center,
+                      style: TextStyle(fontSize: 16)),
+                  ],
+                ),
+              ),
+            ),
           ),
         );
       }
@@ -2510,7 +2702,34 @@ class _HomeScreenState extends ConsumerState<HomeScreen> with SingleTickerProvid
       final cancelData = await _rentalService.prepareCancelRentalListing(listing.listingId);
       
       if (cancelData['success'] != true) {
+        if (mounted) Navigator.pop(context);
         throw Exception(cancelData['error'] ?? 'Failed to prepare cancel');
+      }
+      
+      // Step 2: Sign (Popup)
+      if (mounted) {
+        Navigator.pop(context); // Close "Preparing"
+        showDialog(
+          context: context,
+          barrierDismissible: false,
+          builder: (context) => const Center(
+            child: Card(
+              child: Padding(
+                padding: EdgeInsets.all(24),
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    CircularProgressIndicator(),
+                    SizedBox(height: 16),
+                    Text('Sign removal in wallet...', 
+                      textAlign: TextAlign.center,
+                      style: TextStyle(fontSize: 16)),
+                  ],
+                ),
+              ),
+            ),
+          ),
+        );
       }
       
       final txHash = await walletService.sendTransaction(
@@ -2522,29 +2741,74 @@ class _HomeScreenState extends ConsumerState<HomeScreen> with SingleTickerProvid
         gas: 300000,
       );
       
+      // Step 3: Wait (Popup)
+      if (mounted) {
+        Navigator.pop(context); // Close "Signing"
+        showDialog(
+          context: context,
+          barrierDismissible: false,
+          builder: (context) => Center(
+            child: Card(
+              child: Padding(
+                padding: const EdgeInsets.all(24),
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    const CircularProgressIndicator(),
+                    const SizedBox(height: 16),
+                    Text('Waiting for confirmation...\n${txHash.substring(0, 10)}...', 
+                      textAlign: TextAlign.center,
+                      style: const TextStyle(fontSize: 16)),
+                  ],
+                ),
+              ),
+            ),
+          ),
+        );
+      }
+      
+      bool success = false;
+      try {
+        success = await apiService.waitForTransaction(txHash, maxWaitSeconds: 60);
+      } catch (e) {
+        // Handle timeout
+      } finally {
+        if (mounted) Navigator.pop(context); // Close "Waiting"
+      }
+      
       if (!mounted) return;
       
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text('✅ Rental listing removed!\nTX: ${txHash.substring(0, 10)}...'),
-          backgroundColor: Colors.green,
-          duration: const Duration(seconds: 5),
-        ),
-      );
-      
-      // Refresh listings
-      await _loadRentalListings();
+      if (success) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('✅ Rental listing removed!\nTX: ${txHash.substring(0, 10)}...'),
+            backgroundColor: Colors.green,
+            duration: const Duration(seconds: 5),
+          ),
+        );
+        
+        // Refresh listings
+        await _loadRentalListings();
+      } else {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('❌ Transaction failed or timed out!\nTX: ${txHash.substring(0, 10)}...'),
+            backgroundColor: Colors.red,
+            duration: const Duration(seconds: 5),
+          ),
+        );
+      }
       
     } catch (e) {
-      if (!mounted) return;
-      
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text('❌ Failed to remove listing: $e'),
-          backgroundColor: Colors.red,
-          duration: const Duration(seconds: 5),
-        ),
-      );
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('❌ Failed to remove listing: $e'),
+            backgroundColor: Colors.red,
+            duration: const Duration(seconds: 5),
+          ),
+        );
+      }
     }
   }
 

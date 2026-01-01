@@ -793,12 +793,27 @@ class _NftPortfolioScreenState extends ConsumerState<NftPortfolioScreen> {
       }
     }
     
-    // Step 2: Check if SmartRentHub is approved
+    // Step 2: Check approval (Popup Flow)
     if (mounted) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Checking approval status...'),
-          duration: Duration(seconds: 2),
+      showDialog(
+        context: context,
+        barrierDismissible: false,
+        builder: (context) => const Center(
+          child: Card(
+            child: Padding(
+              padding: EdgeInsets.all(24),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  CircularProgressIndicator(),
+                  SizedBox(height: 16),
+                  Text('Step 1/3: Checking approvals...', 
+                    textAlign: TextAlign.center,
+                    style: TextStyle(fontSize: 16)),
+                ],
+              ),
+            ),
+          ),
         ),
       );
     }
@@ -807,87 +822,139 @@ class _NftPortfolioScreenState extends ConsumerState<NftPortfolioScreen> {
     
     // Step 2a: If not approved, request approval first
     if (!isApproved) {
+      // 1. Prepare Approval View
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('First-time setup: Approving SmartRentHub...'),
-            duration: Duration(seconds: 3),
-            backgroundColor: Colors.orange,
+        Navigator.pop(context); // Close "Checking"
+        showDialog(
+          context: context,
+          barrierDismissible: false,
+          builder: (context) => const Center(
+            child: Card(
+              child: Padding(
+                padding: EdgeInsets.all(24),
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    CircularProgressIndicator(),
+                    SizedBox(height: 16),
+                    Text('Preparing approval transaction...', 
+                      textAlign: TextAlign.center,
+                      style: TextStyle(fontSize: 16)),
+                  ],
+                ),
+              ),
+            ),
           ),
         );
       }
       
-      // Prepare approval transaction
       final approvalResult = await apiService.prepareApproval();
       
       if (approvalResult['success'] != true) {
+        if (mounted) Navigator.pop(context);
         throw Exception(approvalResult['error'] ?? 'Failed to prepare approval');
       }
       
-      // Send approval transaction
+      // 2. Sign Approval View
+      if (mounted) {
+        Navigator.pop(context); // Close "Preparing"
+        showDialog(
+          context: context,
+          barrierDismissible: false,
+          builder: (context) => const Center(
+            child: Card(
+              child: Padding(
+                padding: EdgeInsets.all(24),
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    CircularProgressIndicator(),
+                    SizedBox(height: 16),
+                    Text('First-time Setup:\nSign approval in wallet...', 
+                      textAlign: TextAlign.center,
+                      style: TextStyle(fontSize: 16)),
+                  ],
+                ),
+              ),
+            ),
+          ),
+        );
+      }
+      
       final approvalTxHash = await walletService.sendTransaction(
         to: approvalResult['contract_address'] as String,
         value: EtherAmount.zero(),
         data: approvalResult['function_data'] as String,
-        gas: 150000,  // Increased for safety
+        gas: 150000, 
       );
       
+      // 3. Wait for Approval View
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('Approval granted! TX: ${approvalTxHash.substring(0, 10)}...'),
-            backgroundColor: Colors.green,
-            duration: const Duration(seconds: 3),
+        Navigator.pop(context); // Close "Signing"
+        showDialog(
+          context: context,
+          barrierDismissible: false,
+          builder: (context) => Center(
+            child: Card(
+              child: Padding(
+                padding: const EdgeInsets.all(24),
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    const CircularProgressIndicator(),
+                    const SizedBox(height: 16),
+                    Text('Waiting for approval confirmation...\n${approvalTxHash.substring(0, 10)}...', 
+                      textAlign: TextAlign.center,
+                      style: const TextStyle(fontSize: 16)),
+                  ],
+                ),
+              ),
+            ),
           ),
         );
       }
       
-      // Wait for transaction to be confirmed on blockchain
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('⏳ Waiting for approval to be confirmed on blockchain...'),
-            duration: Duration(seconds: 10),
-            backgroundColor: Colors.orange,
-          ),
-        );
-      }
-      
-      // Poll blockchain to verify approval (max 30 seconds)
+      // Poll blockchain
       bool approvalConfirmed = false;
       for (int i = 0; i < 15; i++) {
         await Future.delayed(const Duration(seconds: 2));
         approvalConfirmed = await apiService.checkApproval(walletAddress);
-        if (approvalConfirmed) {
-          break;
-        }
+        if (approvalConfirmed) break;
       }
       
       if (!approvalConfirmed) {
-        throw Exception('Approval transaction not confirmed. Please try again.');
-      }
-      
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('✅ Approval confirmed on blockchain!'),
-            backgroundColor: Colors.green,
-            duration: Duration(seconds: 2),
-          ),
-        );
+        if (mounted) Navigator.pop(context);
+        throw Exception('Approval verification timed out.');
       }
     }
     
-    // Step 3: Prepare listing transaction
+    // Step 3: Prepare Listing (Transition from Step 2)
     if (mounted) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Creating listing...'),
-          duration: Duration(seconds: 2),
+      Navigator.pop(context); // Close previous dialog (either "Checking" or "Waiting approval")
+      showDialog(
+        context: context,
+        barrierDismissible: false,
+        builder: (context) => const Center(
+          child: Card(
+            child: Padding(
+              padding: EdgeInsets.all(24),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  CircularProgressIndicator(),
+                  SizedBox(height: 16),
+                  Text('Step 2/3: Preparing listing...', 
+                    textAlign: TextAlign.center,
+                    style: TextStyle(fontSize: 16)),
+                ],
+              ),
+            ),
+          ),
         ),
       );
     }
     
+    // Step 3: Prepare listing transaction
     final prepareResult = await apiService.prepareCreateListing(
       tokenId: holding.tokenId,
       sharesForSale: shares,
@@ -895,64 +962,104 @@ class _NftPortfolioScreenState extends ConsumerState<NftPortfolioScreen> {
     );
     
     if (prepareResult['success'] != true) {
+      if (mounted) Navigator.pop(context); // Close dialog on error
       throw Exception(prepareResult['error'] ?? 'Failed to prepare listing');
     }
     
     final contractAddress = prepareResult['contract_address'] as String;
     final functionData = prepareResult['function_data'] as String;
     
+    // Update Dialog -> Signing
+    if (mounted) {
+      Navigator.pop(context); // Close "Preparing"
+      showDialog(
+        context: context,
+        barrierDismissible: false,
+        builder: (context) => const Center(
+          child: Card(
+            child: Padding(
+              padding: EdgeInsets.all(24),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  CircularProgressIndicator(),
+                  SizedBox(height: 16),
+                  Text('Step 3/3: Sign transaction in wallet...', 
+                    textAlign: TextAlign.center,
+                    style: TextStyle(fontSize: 16)),
+                ],
+              ),
+            ),
+          ),
+        ),
+      );
+    }
+
     // Step 4: Send listing transaction via WalletConnect
     final txHash = await walletService.sendTransaction(
       to: contractAddress,
       value: EtherAmount.zero(),
       data: functionData.startsWith('0x') ? functionData : '0x$functionData',
-      gas: 500000,  // Increased for createListing storage operations
+      gas: 500000, 
     );
     
-    // Step 5: Wait for transaction to be mined
+    // Close "Signing" dialog
+    if (mounted) Navigator.pop(context);
+    
+    // Step 5: Wait for transaction to be mined (Popup Dialog)
     if (mounted) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text('⏳ Transaction sent! Waiting for blockchain confirmation...\nTX: ${txHash.substring(0, 10)}...'),
-          backgroundColor: Colors.orange,
-          duration: const Duration(seconds: 60),
+      showDialog(
+        context: context,
+        barrierDismissible: false,
+        builder: (context) => Center(
+          child: Card(
+            child: Padding(
+              padding: const EdgeInsets.all(24),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  const CircularProgressIndicator(),
+                  const SizedBox(height: 16),
+                  Text('Waiting for confirmation...\n${txHash.substring(0, 10)}...', 
+                    textAlign: TextAlign.center,
+                    style: const TextStyle(fontSize: 16)),
+                ],
+              ),
+            ),
+          ),
         ),
       );
     }
     
     // Wait for confirmation (max 60 seconds)
+    bool success = false;
     try {
-      final success = await apiService.waitForTransaction(txHash, maxWaitSeconds: 60);
-      
-      if (mounted) {
-        if (success) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(
-              content: Text('✅ Listing created successfully!\nTX: ${txHash.substring(0, 10)}...'),
-              backgroundColor: Colors.green,
-              duration: const Duration(seconds: 5),
-            ),
-          );
-          
-          // Refresh holdings and marketplace
-          _loadHoldings();
-          ref.invalidate(listingsProvider);
-        } else {
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(
-              content: Text('❌ Transaction failed on blockchain!\nTX: ${txHash.substring(0, 10)}...'),
-              backgroundColor: Colors.red,
-              duration: const Duration(seconds: 5),
-            ),
-          );
-        }
-      }
-    } on ApiException catch (e) {
-      if (mounted) {
+      success = await apiService.waitForTransaction(txHash, maxWaitSeconds: 60);
+    } catch (e) {
+      // Handle timeout inside the logic below
+    } finally {
+      // Close the loading dialog
+      if (mounted) Navigator.pop(context);
+    }
+
+    if (mounted) {
+      if (success) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text('⚠️ Transaction timeout. Check transaction manually.\nTX: ${txHash.substring(0, 10)}...'),
-            backgroundColor: Colors.orange,
+            content: Text('✅ Listing created successfully!\nTX: ${txHash.substring(0, 10)}...'),
+            backgroundColor: Colors.green,
+            duration: const Duration(seconds: 5),
+          ),
+        );
+        
+        // Refresh holdings and marketplace
+        _loadHoldings();
+        ref.invalidate(listingsProvider);
+      } else {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('❌ Transaction failed or timed out!\nTX: ${txHash.substring(0, 10)}...'),
+            backgroundColor: Colors.red,
             duration: const Duration(seconds: 5),
           ),
         );
@@ -1144,18 +1251,34 @@ class _NftPortfolioScreenState extends ConsumerState<NftPortfolioScreen> {
   Future<void> _processRentalListing(UserNftHolding holding, double pricePerNight) async {
     try {
       final walletService = ref.read(walletServiceProvider);
+      final apiService = ApiService(); // Instantiate ApiService
       final walletAddress = widget.walletAddress;
       
       if (walletAddress == null) {
         throw Exception('Wallet not connected');
       }
       
-      // Show loading dialog
+      // Step 1: Show Initial Loading (Preparing)
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('Preparing rental listing...'),
-            duration: Duration(seconds: 2),
+        showDialog(
+          context: context,
+          barrierDismissible: false,
+          builder: (context) => const Center(
+            child: Card(
+              child: Padding(
+                padding: EdgeInsets.all(24),
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    CircularProgressIndicator(),
+                    SizedBox(height: 16),
+                    Text('Step 1/2: Preparing rental listing...', 
+                      textAlign: TextAlign.center,
+                      style: TextStyle(fontSize: 16)),
+                  ],
+                ),
+              ),
+            ),
           ),
         );
       }
@@ -1168,18 +1291,35 @@ class _NftPortfolioScreenState extends ConsumerState<NftPortfolioScreen> {
       );
       
       if (txData['success'] != true) {
+        if (mounted) Navigator.pop(context); // Close dialog on error
         throw Exception(txData['error'] ?? 'Failed to prepare rental listing');
       }
       
       final contractAddress = txData['contract_address'] as String;
       final functionData = txData['function_data'] as String;
       
-      // Send transaction via WalletConnect
+      // Step 2: Update Dialog -> Signing
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('Creating rental listing...'),
-            duration: Duration(seconds: 2),
+        Navigator.pop(context); // Close "Preparing"
+        showDialog(
+          context: context,
+          barrierDismissible: false,
+          builder: (context) => const Center(
+            child: Card(
+              child: Padding(
+                padding: EdgeInsets.all(24),
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    CircularProgressIndicator(),
+                    SizedBox(height: 16),
+                    Text('Step 2/2: Sign transaction in wallet...', 
+                      textAlign: TextAlign.center,
+                      style: TextStyle(fontSize: 16)),
+                  ],
+                ),
+              ),
+            ),
           ),
         );
       }
@@ -1190,24 +1330,71 @@ class _NftPortfolioScreenState extends ConsumerState<NftPortfolioScreen> {
         data: functionData.startsWith('0x') ? functionData : '0x$functionData',
         gas: 500000,
       );
+
+      // Close "Signing" dialog to allow next step to open its own
+      if (mounted) Navigator.pop(context);
+      
+      // Wait for transaction to be mined (Popup Dialog)
+      if (mounted) {
+        showDialog(
+          context: context,
+          barrierDismissible: false,
+          builder: (context) => Center(
+            child: Card(
+              child: Padding(
+                padding: const EdgeInsets.all(24),
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    const CircularProgressIndicator(),
+                    const SizedBox(height: 16),
+                    Text('Waiting for confirmation...\n${txHash.substring(0, 10)}...', 
+                      textAlign: TextAlign.center,
+                      style: const TextStyle(fontSize: 16)),
+                  ],
+                ),
+              ),
+            ),
+          ),
+        );
+      }
+      
+      // Wait for confirmation (max 60 seconds)
+      bool success = false;
+      try {
+        success = await apiService.waitForTransaction(txHash, maxWaitSeconds: 60);
+      } catch (e) {
+        // Handle timeout inside logic below
+      } finally {
+        if (mounted) Navigator.pop(context); // Close dialog
+      }
       
       if (!mounted) return;
       
-      // Show success message
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text(
-            '✅ Rental listing created!\n'
-            'Price: $pricePerNight POL/night\n'
-            'TX: ${txHash.substring(0, 10)}...',
+      if (success) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(
+              '✅ Rental listing created!\n'
+              'Price: $pricePerNight POL/night\n'
+              'TX: ${txHash.substring(0, 10)}...',
+            ),
+            backgroundColor: Colors.green,
+            duration: const Duration(seconds: 5),
           ),
-          backgroundColor: Colors.green,
-          duration: const Duration(seconds: 5),
-        ),
-      );
-      
-      // Refresh holdings
-      await _loadHoldings();
+        );
+        
+        // Refresh holdings
+        await _loadHoldings();
+      } else {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('❌ Transaction failed or timed out!\nTX: ${txHash.substring(0, 10)}...'),
+            backgroundColor: Colors.red,
+            duration: const Duration(seconds: 5),
+          ),
+        );
+      }
       
     } catch (e) {
       if (!mounted) return;
