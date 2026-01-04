@@ -120,7 +120,9 @@ class UserNftHolding {
       totalShares: totalShares,
       ownershipPercentage: (shares / totalShares) * 100,
       estimatedValue: json['estimated_value'] ?? '0',
-      isTopShareholder: json['is_top_shareholder'] ?? false,
+      // If is_top_shareholder is null, calculate based on ownership percentage
+      // 100% ownership means they are the top shareholder
+      isTopShareholder: json['is_top_shareholder'] ?? ((shares / totalShares) >= 0.5),
       location: location,
       activeDays: activeDays,
       attributes: attributes,
