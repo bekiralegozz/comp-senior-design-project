@@ -55,6 +55,11 @@ class CommandResponse(BaseModel):
     status: str  # "success" or "failed"
     message: Optional[str] = None
 
+class LinkDeviceRequest(BaseModel):
+    device_id: str
+    token_id: int
+    wallet_address: str
+
 # ============================================
 # HELPER FUNCTIONS
 # ============================================
@@ -348,3 +353,47 @@ async def remove_device(device_id: str):
         del command_queue[device_id]
     
     return {"status": "removed", "device_id": device_id}
+
+@router.post("/link")
+async def link_device_to_asset(request: LinkDeviceRequest):
+    """
+    Link an IoT device to an NFT asset.
+    
+    This stores the device-asset mapping in our backend database.
+    The on-chain registration (RentalHub.registerDevice) should be called
+    separately by the asset owner through their wallet.
+    
+    For now, we'll store this mapping in memory and return success.
+    In production, this should:
+    1. Store mapping in database
+    2. Optionally trigger on-chain registration if backend has signing capability
+    """
+    device_id = request.device_id
+    token_id = request.token_id
+    wallet_address = request.wallet_address
+    
+    # Check if device exists
+    if device_id not in devices:
+        # Auto-register device if it's being linked
+        devices[device_id] = {
+            "device_type": "smart_lock",
+            "registered_at": datetime.utcnow().isoformat(),
+            "last_seen": None,
+            "lock_state": "unknown"
+        }
+    
+    # Store the asset link
+    devices[device_id]["linked_asset_id"] = token_id
+    devices[device_id]["linked_by"] = wallet_address
+    devices[device_id]["linked_at"] = datetime.utcnow().isoformat()
+    
+    print(f"[IoT] Device {device_id} linked to asset #{token_id} by {wallet_address}")
+    
+    return {
+        "status": "linked",
+        "device_id": device_id,
+        "token_id": token_id,
+        "message": f"Device {device_id} linked to asset #{token_id}",
+        # Note: On-chain registration should be done via smart contract call
+        "note": "For on-chain registration, call RentalHub.registerDevice() from owner wallet"
+    }

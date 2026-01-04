@@ -138,6 +138,41 @@ class IoTService {
       );
     }
   }
+
+  /// Link device to asset (on-chain registration)
+  Future<LinkResult> linkDeviceToAsset(String deviceId, int tokenId, String walletAddress) async {
+    try {
+      final response = await http.post(
+        Uri.parse('${app_config.AppConfig.baseUrl}/api/v1/iot/link'),
+        headers: {'Content-Type': 'application/json'},
+        body: json.encode({
+          'device_id': deviceId,
+          'token_id': tokenId,
+          'wallet_address': walletAddress,
+        }),
+      );
+
+      final data = json.decode(response.body);
+
+      if (response.statusCode == 200) {
+        return LinkResult(
+          success: true,
+          message: data['message'] ?? 'Device linked to asset',
+          txHash: data['tx_hash'],
+        );
+      } else {
+        return LinkResult(
+          success: false,
+          message: data['detail'] ?? 'Failed to link device',
+        );
+      }
+    } catch (e) {
+      return LinkResult(
+        success: false,
+        message: 'Connection error: $e',
+      );
+    }
+  }
 }
 
 /// IoT Device model (renamed to avoid conflict with models.dart)
@@ -213,4 +248,22 @@ class UnlockResult {
     this.commandId,
     required this.message,
   });
+}
+
+/// Result of device-asset link request
+class LinkResult {
+  final bool success;
+  final String message;
+  final String? txHash;
+
+  LinkResult({
+    required this.success,
+    required this.message,
+    this.txHash,
+  });
+}
+
+// Helper getter
+extension IoTDeviceInfoExtension on IoTDeviceInfo {
+  bool get isOnline => online;
 }

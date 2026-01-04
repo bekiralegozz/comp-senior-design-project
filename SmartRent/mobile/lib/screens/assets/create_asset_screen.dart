@@ -6,6 +6,7 @@ import 'package:web3dart/web3dart.dart';
 import '../../core/providers/auth_provider.dart';
 import '../../services/api_service.dart';
 import '../../services/wallet_service.dart';
+import '../../services/iot_service.dart';
 
 class CreateAssetScreen extends ConsumerStatefulWidget {
   const CreateAssetScreen({Key? key}) : super(key: key);
@@ -26,6 +27,32 @@ class _CreateAssetScreenState extends ConsumerState<CreateAssetScreen> {
   String _propertyType = 'Apartment';
   bool _isLoading = false;
   String? _statusMessage;
+  
+  // IoT Device Selection
+  List<IoTDeviceInfo> _availableDevices = [];
+  IoTDeviceInfo? _selectedDevice;
+  bool _isLoadingDevices = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _loadAvailableDevices();
+  }
+
+  Future<void> _loadAvailableDevices() async {
+    setState(() => _isLoadingDevices = true);
+    try {
+      final iotService = IoTService();
+      final devices = await iotService.getAvailableDevices();
+      setState(() {
+        _availableDevices = devices;
+        _isLoadingDevices = false;
+      });
+    } catch (e) {
+      print('Error loading IoT devices: $e');
+      setState(() => _isLoadingDevices = false);
+    }
+  }
 
   @override
   void dispose() {
@@ -105,6 +132,23 @@ class _CreateAssetScreenState extends ConsumerState<CreateAssetScreen> {
           ownerAddress: authState.walletAddress!,
         );
 
+        // Step 4: Link IoT device if selected
+        String? deviceLinkMessage;
+        if (_selectedDevice != null) {
+          setState(() => _statusMessage = 'Linking smart lock device...');
+          final iotService = IoTService();
+          final linkResult = await iotService.linkDeviceToAsset(
+            _selectedDevice!.deviceId,
+            tokenId,
+            authState.walletAddress!,
+          );
+          if (linkResult.success) {
+            deviceLinkMessage = '\n🔐 Smart Lock: ${_selectedDevice!.deviceId} linked';
+          } else {
+            deviceLinkMessage = '\n⚠️ Device link failed: ${linkResult.message}';
+          }
+        }
+
         if (confirmResponse['success'] == true) {
           final openSeaUrl = confirmResponse['opensea_url'] as String?;
           final isPending = confirmResponse['pending'] == true;
@@ -113,7 +157,8 @@ class _CreateAssetScreenState extends ConsumerState<CreateAssetScreen> {
             'NFT created successfully!\n\n'
             'Token ID: $tokenId\n'
             'Transaction: ${txHash.substring(0, 10)}...\n'
-            '${isPending ? "\n⏳ Transaction is being mined..." : "\n✅ Confirmed on blockchain!"}\n\n'
+            '${isPending ? "\n⏳ Transaction is being mined..." : "\n✅ Confirmed on blockchain!"}'
+            '${deviceLinkMessage ?? ""}\n\n'
             '${openSeaUrl != null ? "View on OpenSea" : ""}',
             openSeaUrl: openSeaUrl,
           );
@@ -342,6 +387,158 @@ class _CreateAssetScreenState extends ConsumerState<CreateAssetScreen> {
                     ),
                   ),
                 ],
+              ),
+              const SizedBox(height: 16),
+
+              // IoT Smart Lock Device Selection
+              Card(
+                color: Colors.green[50],
+                child: Padding(
+                  padding: const EdgeInsets.all(16),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Row(
+                        children: [
+                          Icon(Icons.lock_outline, color: Colors.green[700]),
+                          const SizedBox(width: 8),
+                          Text(
+                            'Smart Lock Device (Optional)',
+                            style: TextStyle(
+                              fontWeight: FontWeight.w600,
+                              color: Colors.green[900],
+                            ),
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 8),
+                      Text(
+                        'Connect an ESP32 smart lock device to this property for remote access control.',
+                        style: TextStyle(
+                          fontSize: 12,
+                          color: Colors.green[800],
+                        ),
+                      ),
+                      const SizedBox(height: 12),
+                      if (_isLoadingDevices)
+                        const Center(
+                          child: Padding(
+                            padding: EdgeInsets.all(8.0),
+                            child: CircularProgressIndicator(strokeWidth: 2),
+                          ),
+                        )
+                      else if (_availableDevices.isEmpty)
+                        Container(
+                          padding: const EdgeInsets.all(12),
+                          decoration: BoxDecoration(
+                            color: Colors.orange[50],
+                            borderRadius: BorderRadius.circular(8),
+                            border: Border.all(color: Colors.orange[200]!),
+                          ),
+                          child: Row(
+                            children: [
+                              Icon(Icons.info_outline, color: Colors.orange[700], size: 20),
+                              const SizedBox(width: 8),
+                              Expanded(
+                                child: Text(
+                                  'No devices available. Make sure your ESP32 is powered on and connected.',
+                                  style: TextStyle(
+                                    fontSize: 12,
+                                    color: Colors.orange[900],
+                                  ),
+                                ),
+                              ),
+                              IconButton(
+                                icon: Icon(Icons.refresh, color: Colors.orange[700]),
+                                onPressed: _loadAvailableDevices,
+                                tooltip: 'Refresh devices',
+                              ),
+                            ],
+                          ),
+                        )
+                      else
+                        Row(
+                          children: [
+                            Expanded(
+                              child: DropdownButtonFormField<IoTDeviceInfo>(
+                                value: _selectedDevice,
+                                decoration: InputDecoration(
+                                  border: const OutlineInputBorder(),
+                                  prefixIcon: Icon(Icons.router, color: Colors.green[700]),
+                                  filled: true,
+                                  fillColor: Colors.white,
+                                ),
+                                hint: const Text('Select a device'),
+                                items: _availableDevices.map((device) {
+                                  return DropdownMenuItem(
+                                    value: device,
+                                    child: Row(
+                                      children: [
+                                        Icon(
+                                          device.isOnline ? Icons.wifi : Icons.wifi_off,
+                                          color: device.isOnline ? Colors.green : Colors.grey,
+                                          size: 16,
+                                        ),
+                                        const SizedBox(width: 8),
+                                        Text(device.deviceId),
+                                        const SizedBox(width: 8),
+                                        Container(
+                                          padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                                          decoration: BoxDecoration(
+                                            color: device.isOnline ? Colors.green[100] : Colors.grey[200],
+                                            borderRadius: BorderRadius.circular(4),
+                                          ),
+                                          child: Text(
+                                            device.isOnline ? 'Online' : 'Offline',
+                                            style: TextStyle(
+                                              fontSize: 10,
+                                              color: device.isOnline ? Colors.green[800] : Colors.grey[600],
+                                            ),
+                                          ),
+                                        ),
+                                      ],
+                                    ),
+                                  );
+                                }).toList(),
+                                onChanged: (value) {
+                                  setState(() => _selectedDevice = value);
+                                },
+                              ),
+                            ),
+                            const SizedBox(width: 8),
+                            IconButton(
+                              icon: Icon(Icons.refresh, color: Colors.green[700]),
+                              onPressed: _loadAvailableDevices,
+                              tooltip: 'Refresh devices',
+                            ),
+                          ],
+                        ),
+                      if (_selectedDevice != null) ...[
+                        const SizedBox(height: 8),
+                        Container(
+                          padding: const EdgeInsets.all(8),
+                          decoration: BoxDecoration(
+                            color: Colors.green[100],
+                            borderRadius: BorderRadius.circular(8),
+                          ),
+                          child: Row(
+                            children: [
+                              Icon(Icons.check_circle, color: Colors.green[700], size: 18),
+                              const SizedBox(width: 8),
+                              Text(
+                                'Device "${_selectedDevice!.deviceId}" will be linked to this property',
+                                style: TextStyle(
+                                  fontSize: 12,
+                                  color: Colors.green[900],
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ],
+                    ],
+                  ),
+                ),
               ),
               const SizedBox(height: 16),
 
