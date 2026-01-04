@@ -151,7 +151,7 @@ class ShareListing {
 
   factory ShareListing.fromJson(Map<String, dynamic> json) {
     return ShareListing(
-      listingId: json['listing_id'] ?? json['id'] ?? '',
+      listingId: (json['listing_id'] ?? json['id'] ?? '').toString(),
       tokenId: json['token_id'] ?? 0,
       seller: json['seller'] ?? '',
       sharesAvailable: json['shares_available'] ?? json['amount'] ?? 0,

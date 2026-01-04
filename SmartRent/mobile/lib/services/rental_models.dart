@@ -50,17 +50,16 @@ class RentalListing {
     }
     
     return RentalListing(
-      listingId: json['listing_id'] ?? json['listingId'] ?? 0,
-      tokenId: json['token_id'] ?? json['tokenId'] ?? 0,
-      owner: json['owner'] ?? '',
-      pricePerNight: json['price_per_night']?.toString() ?? 
-                     json['pricePerNight']?.toString() ?? '0',
-      createdAt: json['created_at'] ?? json['createdAt'] ?? 0,
-      isActive: json['is_active'] ?? json['isActive'] ?? false,
-      propertyName: json['property_name'] ?? json['name'],
-      imageUrl: json['image_url'] ?? json['image'],
-      totalShares: json['total_shares'] ?? json['totalShares'],
-      ownerShares: json['owner_shares'] ?? json['ownerShares'],
+      listingId: int.tryParse(json['listing_id']?.toString() ?? '0') ?? 0,
+      tokenId: int.tryParse(json['token_id']?.toString() ?? '0') ?? 0,
+      owner: (json['owner'] ?? '').toString(),
+      pricePerNight: (json['price_per_night'] ?? json['pricePerNight'] ?? json['price_per_night_pol'] ?? 0).toString(),
+      createdAt: int.tryParse(json['created_at']?.toString() ?? '0') ?? 0,
+      isActive: json['is_active'] == true || json['isActive'] == true,
+      propertyName: json['property_name']?.toString() ?? json['name']?.toString(),
+      imageUrl: json['image_url']?.toString() ?? json['image']?.toString(),
+      totalShares: int.tryParse(json['total_shares']?.toString() ?? json['totalShares']?.toString() ?? '0'),
+      ownerShares: int.tryParse(json['owner_shares']?.toString() ?? json['ownerShares']?.toString() ?? '0'),
       location: location,
       activeDays: activeDays,
       attributes: attributes,

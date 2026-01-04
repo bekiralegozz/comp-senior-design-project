@@ -45,11 +45,32 @@ class _HomeScreenState extends ConsumerState<HomeScreen> with SingleTickerProvid
   final _rentalService = RentalService();
   List<RentalListing> _rentalListings = [];
   bool _isLoadingRentals = false;
+  String? _lastWalletAddress; // Track wallet changes
 
   @override
   void initState() {
     super.initState();
     _tabController = TabController(length: 3, vsync: this);
+    
+    // Listen to tab changes to refresh Rentplace when opened
+    _tabController.addListener(() {
+      if (_tabController.index == 2 && mounted) { // Index 2 is Rentplace
+        _checkAndRefreshRentals();
+      }
+    });
+  }
+  
+  /// Check if wallet changed and refresh rentals if needed
+  void _checkAndRefreshRentals() {
+    final currentWallet = ref.read(walletProvider).address;
+    
+    // Refresh if:
+    // 1. First time loading (list empty)
+    // 2. Wallet changed since last load
+    if (_rentalListings.isEmpty || currentWallet != _lastWalletAddress) {
+      _lastWalletAddress = currentWallet;
+      _loadRentalListings();
+    }
   }
 
   @override
@@ -1929,10 +1950,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> with SingleTickerProvid
   }
 
   Widget _buildRentplaceTab(ThemeData theme) {
-    // Load rentals if not loaded yet
-    if (_rentalListings.isEmpty && !_isLoadingRentals) {
-      _loadRentalListings();
-    }
+    // Rentals are loaded automatically when tab is opened (see initState)
     
     return RefreshIndicator(
       onRefresh: _loadRentalListings,
@@ -2252,15 +2270,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> with SingleTickerProvid
                       SizedBox(
                         width: double.infinity,
                         child: ElevatedButton(
-                          onPressed: () {
-                            // TODO: Navigate to booking screen
-                            ScaffoldMessenger.of(context).showSnackBar(
-                              const SnackBar(
-                                content: Text('Booking feature coming soon!'),
-                                duration: Duration(seconds: 2),
-                              ),
-                            );
-                          },
+                          onPressed: () => _bookRental(listing),
                           style: ElevatedButton.styleFrom(
                             backgroundColor: Colors.orange,
                             padding: const EdgeInsets.symmetric(vertical: 8),
@@ -2661,5 +2671,264 @@ class _HomeScreenState extends ConsumerState<HomeScreen> with SingleTickerProvid
         },
       ),
     );
+  }
+  
+  // ============================================
+  // RENTAL BOOKING
+  // ============================================
+  
+  Future<void> _bookRental(RentalListing listing) async {
+    try {
+      // Show loading
+      showDialog(
+        context: context,
+        barrierDismissible: false,
+        builder: (context) => const Center(
+          child: CircularProgressIndicator(),
+        ),
+      );
+      
+      // Fetch booked dates from backend
+      final bookedTimestamps = await _rentalService.getBookedDates(listing.listingId);
+      
+      if (!mounted) return;
+      Navigator.pop(context); // Close loading
+      
+      // Convert timestamps to DateTime (UTC, normalized to midnight)
+      final bookedDates = bookedTimestamps.map((timestamp) {
+        // Timestamp is already UTC midnight from smart contract
+        final utcDate = DateTime.fromMillisecondsSinceEpoch(timestamp * 1000, isUtc: true);
+        // Convert to local date for comparison (only date part, ignore time)
+        return DateTime(utcDate.year, utcDate.month, utcDate.day);
+      }).toList();
+      
+      // Show date picker with blocked dates
+      final dateRange = await showDateRangePicker(
+        context: context,
+        firstDate: DateTime.now(),
+        lastDate: DateTime.now().add(const Duration(days: 365)),
+        builder: (context, child) {
+          return Theme(
+            data: Theme.of(context).copyWith(
+              colorScheme: ColorScheme.light(
+                primary: Colors.orange,
+                onPrimary: Colors.white,
+                surface: Colors.white,
+                onSurface: Colors.black,
+              ),
+            ),
+            child: child!,
+          );
+        },
+        selectableDayPredicate: (DateTime date, DateTime? rangeStart, DateTime? rangeEnd) {
+          // Check if this date is already booked
+          for (var bookedDate in bookedDates) {
+            if (date.year == bookedDate.year &&
+                date.month == bookedDate.month &&
+                date.day == bookedDate.day) {
+              return false; // Date is booked, not selectable
+            }
+          }
+          return true; // Date is available
+        },
+      );
+      
+      if (dateRange == null || !mounted) return;
+      
+      // Calculate nights and total price
+      final checkIn = dateRange.start;
+      final checkOut = dateRange.end;
+      final nights = checkOut.difference(checkIn).inDays;
+      
+      if (nights <= 0) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Please select at least one night'),
+            backgroundColor: Colors.red,
+          ),
+        );
+        return;
+      }
+      
+      final pricePerNight = double.tryParse(listing.pricePerNight) ?? 0.0;
+      final totalPrice = pricePerNight * nights;
+      
+      // Show confirmation dialog
+      final confirmed = await showDialog<bool>(
+        context: context,
+        builder: (context) => AlertDialog(
+          title: Row(
+            children: [
+              Icon(Icons.calendar_month, color: Colors.orange[700]),
+              const SizedBox(width: 8),
+              const Text('Confirm Booking'),
+            ],
+          ),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                listing.propertyName ?? 'Property #${listing.tokenId}',
+                style: const TextStyle(
+                  fontWeight: FontWeight.bold,
+                  fontSize: 16,
+                ),
+              ),
+              const SizedBox(height: 16),
+              _buildBookingRow('Check-in:', '${checkIn.day}/${checkIn.month}/${checkIn.year}'),
+              const SizedBox(height: 8),
+              _buildBookingRow('Check-out:', '${checkOut.day}/${checkOut.month}/${checkOut.year}'),
+              const SizedBox(height: 8),
+              _buildBookingRow('Nights:', '$nights'),
+              const SizedBox(height: 8),
+              _buildBookingRow('Price per night:', '${pricePerNight.toStringAsFixed(4)} POL'),
+              const Divider(height: 24),
+              _buildBookingRow(
+                'Total Price:',
+                '${totalPrice.toStringAsFixed(4)} POL',
+                isTotal: true,
+              ),
+            ],
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(context, false),
+              child: const Text('Cancel'),
+            ),
+            ElevatedButton(
+              onPressed: () => Navigator.pop(context, true),
+              style: ElevatedButton.styleFrom(
+                backgroundColor: Colors.orange,
+              ),
+              child: const Text('Confirm & Pay'),
+            ),
+          ],
+        ),
+      );
+      
+      if (confirmed == true && mounted) {
+        await _processRentalBooking(listing, checkIn, checkOut, totalPrice);
+      }
+      
+    } catch (e) {
+      if (!mounted) return;
+      
+      // Close any open dialogs
+      Navigator.of(context).popUntil((route) => route.isFirst);
+      
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('❌ Error: $e'),
+          backgroundColor: Colors.red,
+          duration: const Duration(seconds: 5),
+        ),
+      );
+    }
+  }
+  
+  Widget _buildBookingRow(String label, String value, {bool isTotal = false}) {
+    return Row(
+      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+      children: [
+        Text(
+          label,
+          style: TextStyle(
+            fontWeight: isTotal ? FontWeight.bold : FontWeight.normal,
+            fontSize: isTotal ? 16 : 14,
+          ),
+        ),
+        Text(
+          value,
+          style: TextStyle(
+            fontWeight: isTotal ? FontWeight.bold : FontWeight.w600,
+            fontSize: isTotal ? 16 : 14,
+            color: isTotal ? Colors.orange[700] : Colors.black87,
+          ),
+        ),
+      ],
+    );
+  }
+  
+  Future<void> _processRentalBooking(
+    RentalListing listing,
+    DateTime checkIn,
+    DateTime checkOut,
+    double totalPrice,
+  ) async {
+    try {
+      final walletService = ref.read(walletServiceProvider);
+      final walletState = ref.read(walletProvider);
+      final walletAddress = walletState.address;
+      
+      if (walletAddress == null) {
+        throw Exception('Wallet not connected');
+      }
+      
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Preparing booking transaction...'),
+            duration: Duration(seconds: 2),
+          ),
+        );
+      }
+      
+      // Convert DateTime to Unix timestamp (UTC midnight)
+      // Normalize to midnight UTC to match smart contract's date handling
+      final checkInUtc = DateTime.utc(checkIn.year, checkIn.month, checkIn.day);
+      final checkOutUtc = DateTime.utc(checkOut.year, checkOut.month, checkOut.day);
+      final checkInTimestamp = checkInUtc.millisecondsSinceEpoch ~/ 1000;
+      final checkOutTimestamp = checkOutUtc.millisecondsSinceEpoch ~/ 1000;
+      
+      // Prepare transaction from backend
+      final txData = await _rentalService.prepareRentAsset(
+        listingId: listing.listingId,
+        checkInDate: checkInTimestamp,
+        checkOutDate: checkOutTimestamp,
+        renterAddress: walletAddress,
+      );
+      
+      if (txData['success'] != true) {
+        throw Exception(txData['error'] ?? 'Failed to prepare booking');
+      }
+      
+      // Send transaction with payment
+      final txHash = await walletService.sendTransaction(
+        to: txData['contract_address'],
+        value: EtherAmount.fromBigInt(EtherUnit.wei, BigInt.parse(txData['value_wei'])),
+        data: txData['function_data'].startsWith('0x') 
+            ? txData['function_data'] 
+            : '0x${txData['function_data']}',
+        gas: 800000, // Higher gas for complex rental transaction
+      );
+      
+      if (!mounted) return;
+      
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            '✅ Booking confirmed!\n'
+            'TX: ${txHash.substring(0, 10)}...',
+          ),
+          backgroundColor: Colors.green,
+          duration: const Duration(seconds: 5),
+        ),
+      );
+      
+      // Refresh listings
+      await _loadRentalListings();
+      
+    } catch (e) {
+      if (!mounted) return;
+      
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('❌ Failed to book rental: $e'),
+          backgroundColor: Colors.red,
+          duration: const Duration(seconds: 5),
+        ),
+      );
+    }
   }
 }

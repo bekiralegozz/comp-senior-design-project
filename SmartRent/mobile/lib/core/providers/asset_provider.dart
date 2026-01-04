@@ -270,17 +270,17 @@ class MarketplaceListing {
 
   factory MarketplaceListing.fromJson(Map<String, dynamic> json) {
     return MarketplaceListing(
-      listingId: json['listing_id'] ?? 0,
-      tokenId: json['token_id'] ?? 0,
-      seller: json['seller'] ?? '',
-      sharesForSale: json['shares_for_sale'] ?? 0,
-      sharesRemaining: json['shares_remaining'] ?? 0,
-      pricePerSharePol: (json['price_per_share_pol'] ?? 0).toDouble(),
-      isActive: json['is_active'] ?? false,
-      createdAt: json['created_at'] ?? 0,
-      assetName: json['asset_name'] ?? 'Asset #${json['token_id']}',
-      assetImage: json['asset_image'] ?? '',
-      totalShares: json['total_shares'] ?? 1000,
+      listingId: int.tryParse(json['listing_id']?.toString() ?? '0') ?? 0,
+      tokenId: int.tryParse(json['token_id']?.toString() ?? '0') ?? 0,
+      seller: (json['seller'] ?? '').toString(),
+      sharesForSale: int.tryParse(json['shares_for_sale']?.toString() ?? '0') ?? 0,
+      sharesRemaining: int.tryParse(json['shares_remaining']?.toString() ?? '0') ?? 0,
+      pricePerSharePol: double.tryParse(json['price_per_share_pol']?.toString() ?? '0') ?? 0.0,
+      isActive: json['is_active'] == true || json['is_active'] == 'true',
+      createdAt: int.tryParse(json['created_at']?.toString() ?? '0') ?? 0,
+      assetName: (json['asset_name'] ?? 'Asset #${json['token_id']}').toString(),
+      assetImage: (json['asset_image'] ?? '').toString(),
+      totalShares: int.tryParse(json['total_shares']?.toString() ?? '1000') ?? 1000,
     );
   }
 

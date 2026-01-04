@@ -16,12 +16,13 @@ class AppConfig {
   static const String networkName = 'Polygon';
   static const String currencySymbol = 'POL'; // Formerly MATIC, rebranded to POL
   
-  // WalletConnect Configuration
-  static const String walletConnectProjectId = 'YOUR_WALLETCONNECT_PROJECT_ID';
+  // WalletConnect Configuration (Reown Cloud)
+  static const String walletConnectProjectId = '64487c9584d97c90e3f9e60387c1a6cb';
   
-  // Contract Addresses - DEPLOYED ON POLYGON MAINNET (29 Aralık 2024 - Majority Shareholder Fix)
-  static const String building1122Contract = '0x1179c6722cBEdB2bdF38FE1B3103edDa341523DC';
-  static const String smartRentHubContract = '0xA3602c0548c771e787AaEEDFFcda28147F4FA615';
+  // Contract Addresses (FINAL DEPLOYMENT - 2026-01-04 - ALL BUGS FIXED)
+  static const String building1122Contract = '0xC1BaB914b2ad7762E9174c7BD76cf48884F48B9c';
+  static const String smartRentHubContract = '0x1bd8D0f166A53d6173E549B408a76625404d8CB6';
+  static const String rentalHubContract = '0x1240d30b7fBa73F1Ad5C15ecb6f2eF30AD2e9008';
   static const String rentalManagerContract = '0xD10fcf5dC4188C688634865b6A89776b9ED57358';
   
   // Legacy contract names (for backward compatibility)

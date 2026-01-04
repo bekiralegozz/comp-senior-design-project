@@ -5,6 +5,7 @@ import 'package:walletconnect_flutter_v2/walletconnect_flutter_v2.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:url_launcher/url_launcher.dart';
 import '../constants/blockchain_config.dart';
+import '../constants/config.dart'; // AppConfig import
 
 /// Wallet Service - WalletConnect Integration
 /// Handles wallet connection, transaction signing, and blockchain interaction
@@ -43,7 +44,7 @@ class WalletService {
   Future<void> _initializeWalletConnect() async {
     try {
       _web3App = await Web3App.createInstance(
-        projectId: '17a60844bceaf7f347f653e3ead1c165',
+        projectId: AppConfig.walletConnectProjectId, // Reown Project ID
         metadata: const PairingMetadata(
           name: 'SmartRent',
           description: 'Decentralized Real Estate Rental Platform',

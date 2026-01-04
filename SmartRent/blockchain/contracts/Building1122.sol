@@ -174,6 +174,9 @@ contract Building1122 is ERC1155, Ownable, Pausable, IERC2981 {
     /**
      * @dev Override _update to add pause functionality and SmartRentHub notifications
      * This is called on every transfer (including mint and burn)
+     * 
+     * CRITICAL: We must get the top shareholder BEFORE the transfer happens
+     * to properly detect ownership changes for rental listing deactivation.
      */
     function _update(
         address from,
@@ -181,18 +184,35 @@ contract Building1122 is ERC1155, Ownable, Pausable, IERC2981 {
         uint256[] memory ids,
         uint256[] memory values
     ) internal override whenNotPaused {
-        // First, execute the actual transfer
+        // Get top shareholders BEFORE transfer (for rental listing deactivation logic)
+        address[] memory previousTopShareholders = new address[](ids.length);
+        
+        if (smartRentHub != address(0) && from != address(0)) {
+            for (uint256 i = 0; i < ids.length; i++) {
+                try ISmartRentHub(smartRentHub).getTopShareholder(ids[i]) returns (
+                    address topHolder,
+                    uint256 /* topBalance */
+                ) {
+                    previousTopShareholders[i] = topHolder;
+                } catch {
+                    previousTopShareholders[i] = address(0);
+                }
+            }
+        }
+        
+        // Execute the actual transfer (balances change here)
         super._update(from, to, ids, values);
         
-        // Then notify SmartRentHub about ownership changes (with try/catch for safety)
+        // Notify SmartRentHub about ownership changes AFTER transfer
         // Skip notification on mint (from == address(0)) as registerAsset handles it
         if (smartRentHub != address(0) && from != address(0)) {
             for (uint256 i = 0; i < ids.length; i++) {
-                try ISmartRentHub(smartRentHub).updateOwnership(
+                try ISmartRentHub(smartRentHub).updateOwnershipWithPrevious(
                     ids[i],
                     from,
                     to,
-                    values[i]
+                    values[i],
+                    previousTopShareholders[i]  // ← Pass BEFORE-transfer top shareholder
                 ) {
                     // Success - ownership updated in hub
                 } catch {

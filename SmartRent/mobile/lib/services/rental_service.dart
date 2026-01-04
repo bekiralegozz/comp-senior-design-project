@@ -176,8 +176,9 @@ class RentalService {
       );
 
       if (response.statusCode == 200) {
-        final List<dynamic> data = json.decode(response.body);
-        return data.map((timestamp) => timestamp as int).toList();
+        final Map<String, dynamic> responseData = json.decode(response.body);
+        final List<dynamic> bookedDates = responseData['booked_dates'] ?? [];
+        return bookedDates.map((timestamp) => int.tryParse(timestamp.toString()) ?? 0).toList();
       } else {
         return [];
       }

@@ -146,6 +146,13 @@ contract RentalHub is Ownable, ReentrancyGuard, Pausable {
         address indexed owner
     );
     
+    event RentalListingDeactivatedDueToOwnershipChange(
+        uint256 indexed listingId,
+        uint256 indexed tokenId,
+        address indexed previousOwner,
+        address newTopShareholder
+    );
+    
     event RentalBooked(
         uint256 indexed rentalId,
         uint256 indexed listingId,
@@ -232,6 +239,56 @@ contract RentalHub is Ownable, ReentrancyGuard, Pausable {
      */
     function unpause() external onlyOwner {
         _unpause();
+    }
+    
+    /**
+     * @dev Called by SmartRentHub when top shareholder changes for a token
+     * Automatically deactivates rental listings if the owner is no longer the top shareholder
+     * @param tokenId The token ID whose top shareholder has changed
+     * @param previousTopShareholder The address of the previous top shareholder
+     * @param newTopShareholder The address of the new top shareholder
+     */
+    function onTopShareholderChanged(
+        uint256 tokenId,
+        address previousTopShareholder,
+        address newTopShareholder
+    ) external {
+        // Only SmartRentHub can call this
+        require(msg.sender == address(smartRentHub), "RentalHub: only SmartRentHub can call");
+        require(previousTopShareholder != newTopShareholder, "RentalHub: shareholders are the same");
+        
+        // Find and deactivate all active listings by previousTopShareholder for this tokenId
+        uint256 deactivatedCount = 0;
+        for (uint256 i = 0; i < _activeRentalListingIds.length; i++) {
+            uint256 listingId = _activeRentalListingIds[i];
+            RentalListing storage listing = rentalListings[listingId];
+            
+            // Check if this listing matches: same tokenId, same owner, and is active
+            if (listing.tokenId == tokenId && 
+                listing.owner == previousTopShareholder && 
+                listing.isActive) {
+                
+                // Deactivate the listing
+                listing.isActive = false;
+                
+                // Remove from active listings array
+                _removeFromActiveRentalListings(listingId);
+                
+                emit RentalListingDeactivatedDueToOwnershipChange(
+                    listingId,
+                    tokenId,
+                    previousTopShareholder,
+                    newTopShareholder
+                );
+                
+                deactivatedCount++;
+                
+                // Decrement i because we removed an element
+                if (i > 0) i--;
+            }
+        }
+        
+        // Note: We don't revert if no listings found, as this is a valid scenario
     }
     
     // ============================================
@@ -357,10 +414,9 @@ contract RentalHub is Ownable, ReentrancyGuard, Pausable {
         _renterToRentals[msg.sender].push(rentalId);
         _assetToRentals[listing.tokenId].push(rentalId);
         
-        // Transfer payment to owner
+        // Distribute payment to all shareholders proportionally
         if (ownerPayment > 0) {
-            (bool ownerSuccess, ) = payable(listing.owner).call{value: ownerPayment}("");
-            require(ownerSuccess, "RentalHub: owner payment failed");
+            _distributeRentalPayment(listing.tokenId, ownerPayment);
         }
         
         // Transfer platform fee
@@ -599,6 +655,50 @@ contract RentalHub is Ownable, ReentrancyGuard, Pausable {
         // Rebuild bookedDatesList (gas-intensive, but cancellations should be rare)
         delete _bookedDatesList[listingId];
         // Note: In production, consider optimizing this
+    }
+    
+    /**
+     * @dev Distribute rental payment to all shareholders proportionally
+     * @param tokenId The token ID (property) to distribute payment for
+     * @param totalPayment Total payment to distribute
+     */
+    function _distributeRentalPayment(uint256 tokenId, uint256 totalPayment) private {
+        // Get all shareholders from SmartRentHub
+        address[] memory shareholders = ISmartRentHub(smartRentHub).getAssetOwners(tokenId);
+        require(shareholders.length > 0, "RentalHub: no shareholders found");
+        
+        // Get total shares for this token from SmartRentHub
+        ISmartRentHub.AssetInfo memory asset = ISmartRentHub(smartRentHub).getAsset(tokenId);
+        uint256 totalShares = asset.totalShares;
+        require(totalShares > 0, "RentalHub: no shares exist");
+        
+        // Distribute payment proportionally to each shareholder
+        uint256 distributedAmount = 0;
+        for (uint256 i = 0; i < shareholders.length; i++) {
+            address shareholder = shareholders[i];
+            uint256 shareholderBalance = IERC1155(buildingToken).balanceOf(shareholder, tokenId);
+            
+            if (shareholderBalance > 0) {
+                // Calculate proportional payment
+                uint256 payment = (totalPayment * shareholderBalance) / totalShares;
+                
+                if (payment > 0) {
+                    distributedAmount += payment;
+                    (bool success, ) = payable(shareholder).call{value: payment}("");
+                    require(success, "RentalHub: shareholder payment failed");
+                }
+            }
+        }
+        
+        // Handle any remaining dust (rounding errors)
+        if (totalPayment > distributedAmount) {
+            uint256 dust = totalPayment - distributedAmount;
+            // Send dust to first shareholder or fee recipient
+            if (dust > 0 && shareholders.length > 0) {
+                (bool dustSuccess, ) = payable(shareholders[0]).call{value: dust}("");
+                require(dustSuccess, "RentalHub: dust payment failed");
+            }
+        }
     }
     
     /**

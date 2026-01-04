@@ -182,18 +182,26 @@ class SmartRentHubService:
             
             listings = []
             for listing in listings_raw:
-                # ListingWithAsset struct from contract
+                # Listing struct from contract (GAS OPTIMIZED - struct packing):
+                # [0] uint64 listingId
+                # [1] uint64 tokenId
+                # [2] uint64 sharesForSale
+                # [3] uint64 sharesRemaining
+                # [4] address seller
+                # [5] bool isActive
+                # [6] uint128 pricePerShare
+                # [7] uint64 createdAt
                 listings.append({
-                    "listing_id": listing[0],
-                    "token_id": listing[1],
-                    "seller": listing[2],
-                    "shares_for_sale": listing[3],
-                    "shares_remaining": listing[4],
-                    "price_per_share": listing[5],
-                    "is_active": listing[6],
-                    "created_at": listing[7],
+                    "listing_id": int(listing[0]),
+                    "token_id": int(listing[1]),
+                    "shares_for_sale": int(listing[2]),
+                    "shares_remaining": int(listing[3]),
+                    "seller": listing[4],
+                    "is_active": bool(listing[5]),
+                    "price_per_share": int(listing[6]),
+                    "created_at": int(listing[7]),
                     # Price in POL (wei to ether)
-                    "price_per_share_pol": float(self.w3.from_wei(listing[5], 'ether'))
+                    "price_per_share_pol": float(self.w3.from_wei(int(listing[6]), 'ether'))
                 })
             
             return listings
@@ -210,16 +218,21 @@ class SmartRentHubService:
             
             listing = self.contract.functions.getListing(listing_id).call()
             
+            # Listing struct from contract (GAS OPTIMIZED - struct packing):
+            # [0] uint64 listingId, [1] uint64 tokenId
+            # [2] uint64 sharesForSale, [3] uint64 sharesRemaining
+            # [4] address seller, [5] bool isActive
+            # [6] uint128 pricePerShare, [7] uint64 createdAt
             return {
-                "listing_id": listing[0],
-                "token_id": listing[1],
-                "seller": listing[2],
-                "shares_for_sale": listing[3],
-                "shares_remaining": listing[4],
-                "price_per_share": listing[5],
-                "is_active": listing[6],
-                "created_at": listing[7],
-                "price_per_share_pol": float(self.w3.from_wei(listing[5], 'ether'))
+                "listing_id": int(listing[0]),
+                "token_id": int(listing[1]),
+                "shares_for_sale": int(listing[2]),
+                "shares_remaining": int(listing[3]),
+                "seller": listing[4],
+                "is_active": bool(listing[5]),
+                "price_per_share": int(listing[6]),
+                "created_at": int(listing[7]),
+                "price_per_share_pol": float(self.w3.from_wei(int(listing[6]), 'ether'))
             }
             
         except Exception as e:
@@ -238,16 +251,17 @@ class SmartRentHubService:
             
             listings = []
             for listing in listings_raw:
+                # Listing struct from contract (GAS OPTIMIZED - struct packing)
                 listings.append({
-                    "listing_id": listing[0],
-                    "token_id": listing[1],
-                    "seller": listing[2],
-                    "shares_for_sale": listing[3],
-                    "shares_remaining": listing[4],
-                    "price_per_share": listing[5],
-                    "is_active": listing[6],
-                    "created_at": listing[7],
-                    "price_per_share_pol": float(self.w3.from_wei(listing[5], 'ether'))
+                    "listing_id": int(listing[0]),
+                    "token_id": int(listing[1]),
+                    "shares_for_sale": int(listing[2]),
+                    "shares_remaining": int(listing[3]),
+                    "seller": listing[4],
+                    "is_active": bool(listing[5]),
+                    "price_per_share": int(listing[6]),
+                    "created_at": int(listing[7]),
+                    "price_per_share_pol": float(self.w3.from_wei(int(listing[6]), 'ether'))
                 })
             
             return listings

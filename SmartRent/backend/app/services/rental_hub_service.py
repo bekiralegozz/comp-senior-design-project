@@ -136,7 +136,12 @@ class RentalHubService:
                                         if response.status_code == 200:
                                             metadata = response.json()
                                             listing_dict['property_name'] = metadata.get('name', f'Property #{token_id}')
-                                            listing_dict['image_url'] = metadata.get('image', '')
+                                            
+                                            # Convert IPFS image URL to HTTP
+                                            image_url = metadata.get('image', '')
+                                            if image_url and image_url.startswith('ipfs://'):
+                                                image_url = image_url.replace('ipfs://', 'https://ipfs.io/ipfs/')
+                                            listing_dict['image_url'] = image_url
                                             
                                             # Parse attributes - can be array or dict
                                             attributes_raw = metadata.get('attributes', [])
