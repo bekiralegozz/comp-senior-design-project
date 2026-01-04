@@ -305,7 +305,7 @@ async def request_unlock(request: UnlockRequest):
     # Add unlock command to queue
     command_id = add_command(device_id, "unlock", {
         "wallet_address": wallet_address,
-        "rental_id": rental_id,
+        "asset_id": linked_asset_id,
         "duration": 5  # Auto-lock after 5 seconds
     })
     
