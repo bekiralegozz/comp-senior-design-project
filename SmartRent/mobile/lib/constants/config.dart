@@ -2,8 +2,8 @@ import 'package:flutter/material.dart';
 
 /// Application configuration constants
 class AppConfig {
-  // API Configuration
-  static const String baseUrl = 'https://lucky-beauty-production-e86e.up.railway.app';
+  // API Configuration - Local Development Backend
+  static const String baseUrl = 'http://localhost:8000';
   static const String apiVersion = 'v1';
   static const String apiBaseUrl = '$baseUrl/api/$apiVersion';
   
@@ -16,13 +16,14 @@ class AppConfig {
   static const String networkName = 'Polygon';
   static const String currencySymbol = 'POL'; // Formerly MATIC, rebranded to POL
   
-  // WalletConnect Configuration
-  static const String walletConnectProjectId = 'YOUR_WALLETCONNECT_PROJECT_ID';
+  // WalletConnect Configuration (Reown Cloud)
+  static const String walletConnectProjectId = '64487c9584d97c90e3f9e60387c1a6cb';
   
-  // Contract Addresses - DEPLOYED ON POLYGON MAINNET (18 Aralık 2024 - SmartRentHub entegrasyonlu)
-  static const String building1122Contract = '0x6b9aa94207650AaeC4a89F6818c4E8791AF10ed3';
-  static const String smartRentHubContract = '0x6E5FF6db7cdB03881710A497e449274ab8c4a3d0';
-  static const String rentalManagerContract = '0x45FAd67F890a4154C5c83191231BD2E20048a729';
+  // Contract Addresses (FINAL DEPLOYMENT - 2026-01-04 - ALL BUGS FIXED)
+  static const String building1122Contract = '0xC1BaB914b2ad7762E9174c7BD76cf48884F48B9c';
+  static const String smartRentHubContract = '0x1bd8D0f166A53d6173E549B408a76625404d8CB6';
+  static const String rentalHubContract = '0x1240d30b7fBa73F1Ad5C15ecb6f2eF30AD2e9008';
+  static const String rentalManagerContract = '0xD10fcf5dC4188C688634865b6A89776b9ED57358';
   
   // Legacy contract names (for backward compatibility)
   static const String assetTokenContract = building1122Contract;

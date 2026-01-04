@@ -246,16 +246,13 @@ async def prepare_mint(request: PrepareMintRequest):
             abi=web3_service.building_abi
         )
         
-        # Encode function data
-        function_data = contract.encodeABI(
-            fn_name="mintInitialSupply",
-            args=[
-                request.token_id,
-                Web3.to_checksum_address(request.owner_address),
-                request.total_shares,
-                metadata_uri
-            ]
-        )
+        # Encode function data using Web3.py's correct method
+        function_data = contract.functions.mintInitialSupply(
+            request.token_id,
+            Web3.to_checksum_address(request.owner_address),
+            request.total_shares,
+            metadata_uri
+        )._encode_transaction_data()
         
         # Estimate gas
         gas_estimate = "0.05 POL"  # Rough estimate, actual will be calculated by wallet
@@ -430,6 +427,9 @@ async def get_user_holdings(wallet_address: str):
         # Get assets from SmartRentHub (includes balance)
         assets = smartrenthub_service.get_assets_by_owner(wallet_address)
         
+        # Import rental_hub_service to check top shareholder
+        from app.services.rental_hub_service import rental_hub_service
+        
         # Transform to UserNftHolding format expected by Flutter
         holdings = []
         for asset in assets:
@@ -446,6 +446,11 @@ async def get_user_holdings(wallet_address: str):
             if image_url.startswith("ipfs://"):
                 image_url = image_url.replace("ipfs://", "https://ipfs.io/ipfs/")
             
+            # Check if user is top shareholder for rental button
+            majority_shareholder = rental_hub_service.get_majority_shareholder(token_id)
+            is_top_shareholder = (majority_shareholder and 
+                                 majority_shareholder.lower() == wallet_address.lower())
+            
             holdings.append({
                 "token_id": token_id,
                 "name": name,
@@ -453,7 +458,8 @@ async def get_user_holdings(wallet_address: str):
                 "shares": balance,
                 "total_shares": total_shares,
                 "ownership_percentage": asset.get("ownership_percentage", 0),
-                "estimated_value": "0"  # TODO: Add price from listings
+                "estimated_value": "0",  # TODO: Add price from listings
+                "is_top_shareholder": is_top_shareholder
             })
         
         return holdings

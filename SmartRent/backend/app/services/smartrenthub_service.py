@@ -182,18 +182,26 @@ class SmartRentHubService:
             
             listings = []
             for listing in listings_raw:
-                # ListingWithAsset struct from contract
+                # Listing struct from contract (GAS OPTIMIZED - struct packing):
+                # [0] uint64 listingId
+                # [1] uint64 tokenId
+                # [2] uint64 sharesForSale
+                # [3] uint64 sharesRemaining
+                # [4] address seller
+                # [5] bool isActive
+                # [6] uint128 pricePerShare
+                # [7] uint64 createdAt
                 listings.append({
-                    "listing_id": listing[0],
-                    "token_id": listing[1],
-                    "seller": listing[2],
-                    "shares_for_sale": listing[3],
-                    "shares_remaining": listing[4],
-                    "price_per_share": listing[5],
-                    "is_active": listing[6],
-                    "created_at": listing[7],
+                    "listing_id": int(listing[0]),
+                    "token_id": int(listing[1]),
+                    "shares_for_sale": int(listing[2]),
+                    "shares_remaining": int(listing[3]),
+                    "seller": listing[4],
+                    "is_active": bool(listing[5]),
+                    "price_per_share": int(listing[6]),
+                    "created_at": int(listing[7]),
                     # Price in POL (wei to ether)
-                    "price_per_share_pol": float(self.w3.from_wei(listing[5], 'ether'))
+                    "price_per_share_pol": float(self.w3.from_wei(int(listing[6]), 'ether'))
                 })
             
             return listings
@@ -210,16 +218,21 @@ class SmartRentHubService:
             
             listing = self.contract.functions.getListing(listing_id).call()
             
+            # Listing struct from contract (GAS OPTIMIZED - struct packing):
+            # [0] uint64 listingId, [1] uint64 tokenId
+            # [2] uint64 sharesForSale, [3] uint64 sharesRemaining
+            # [4] address seller, [5] bool isActive
+            # [6] uint128 pricePerShare, [7] uint64 createdAt
             return {
-                "listing_id": listing[0],
-                "token_id": listing[1],
-                "seller": listing[2],
-                "shares_for_sale": listing[3],
-                "shares_remaining": listing[4],
-                "price_per_share": listing[5],
-                "is_active": listing[6],
-                "created_at": listing[7],
-                "price_per_share_pol": float(self.w3.from_wei(listing[5], 'ether'))
+                "listing_id": int(listing[0]),
+                "token_id": int(listing[1]),
+                "shares_for_sale": int(listing[2]),
+                "shares_remaining": int(listing[3]),
+                "seller": listing[4],
+                "is_active": bool(listing[5]),
+                "price_per_share": int(listing[6]),
+                "created_at": int(listing[7]),
+                "price_per_share_pol": float(self.w3.from_wei(int(listing[6]), 'ether'))
             }
             
         except Exception as e:
@@ -238,16 +251,17 @@ class SmartRentHubService:
             
             listings = []
             for listing in listings_raw:
+                # Listing struct from contract (GAS OPTIMIZED - struct packing)
                 listings.append({
-                    "listing_id": listing[0],
-                    "token_id": listing[1],
-                    "seller": listing[2],
-                    "shares_for_sale": listing[3],
-                    "shares_remaining": listing[4],
-                    "price_per_share": listing[5],
-                    "is_active": listing[6],
-                    "created_at": listing[7],
-                    "price_per_share_pol": float(self.w3.from_wei(listing[5], 'ether'))
+                    "listing_id": int(listing[0]),
+                    "token_id": int(listing[1]),
+                    "shares_for_sale": int(listing[2]),
+                    "shares_remaining": int(listing[3]),
+                    "seller": listing[4],
+                    "is_active": bool(listing[5]),
+                    "price_per_share": int(listing[6]),
+                    "created_at": int(listing[7]),
+                    "price_per_share_pol": float(self.w3.from_wei(int(listing[6]), 'ether'))
                 })
             
             return listings
@@ -276,11 +290,12 @@ class SmartRentHubService:
             # Convert POL to wei
             price_wei = self.w3.to_wei(price_per_share_pol, 'ether')
             
-            # Encode function data
-            function_data = self.contract.encodeABI(
-                fn_name="createListing",
-                args=[token_id, shares_for_sale, price_wei]
-            )
+            # Encode function data using Web3.py's correct method
+            function_data = self.contract.functions.createListing(
+                token_id, 
+                shares_for_sale, 
+                price_wei
+            )._encode_transaction_data()
             
             return {
                 "success": True,
@@ -299,10 +314,10 @@ class SmartRentHubService:
             if not self.contract:
                 return {"success": False, "error": "Contract not initialized"}
             
-            function_data = self.contract.encodeABI(
-                fn_name="cancelListing",
-                args=[listing_id]
-            )
+            # Encode function data using Web3.py's correct method
+            function_data = self.contract.functions.cancelListing(
+                listing_id
+            )._encode_transaction_data()
             
             return {
                 "success": True,
@@ -333,10 +348,11 @@ class SmartRentHubService:
             # Calculate total value to send
             total_value_wei = shares_to_buy * price_per_share_wei
             
-            function_data = self.contract.encodeABI(
-                fn_name="buyFromListing",
-                args=[listing_id, shares_to_buy]
-            )
+            # Encode function data using Web3.py's correct method
+            function_data = self.contract.functions.buyFromListing(
+                listing_id, 
+                shares_to_buy
+            )._encode_transaction_data()
             
             return {
                 "success": True,
@@ -433,11 +449,11 @@ class SmartRentHubService:
                 abi=building_abi
             )
             
-            # Encode setApprovalForAll(operator, approved)
-            function_data = building_contract.encodeABI(
-                fn_name="setApprovalForAll",
-                args=[Web3.to_checksum_address(self.contract_address), approved]
-            )
+            # Encode setApprovalForAll(operator, approved) using Web3.py's correct method
+            function_data = building_contract.functions.setApprovalForAll(
+                Web3.to_checksum_address(self.contract_address), 
+                approved
+            )._encode_transaction_data()
             
             return {
                 "success": True,
@@ -563,11 +579,13 @@ class SmartRentHubService:
             if total_supply == 0:
                 return {"success": False, "error": f"Token {token_id} does not exist in Building1122"}
             
-            # Encode registerAsset(tokenId, initialOwner, totalShares, metadataURI)
-            function_data = self.contract.encodeABI(
-                fn_name="registerAsset",
-                args=[token_id, Web3.to_checksum_address(owner), total_supply, metadata_uri]
-            )
+            # Encode registerAsset(tokenId, initialOwner, totalShares, metadataURI) using Web3.py's correct method
+            function_data = self.contract.functions.registerAsset(
+                token_id, 
+                Web3.to_checksum_address(owner), 
+                total_supply, 
+                metadata_uri
+            )._encode_transaction_data()
             
             return {
                 "success": True,

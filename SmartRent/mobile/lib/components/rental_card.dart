@@ -283,11 +283,61 @@ class RentalCard extends StatelessWidget {
         // Progress indicator based on dates
         Expanded(child: _buildProgressIndicator(theme)),
         
-        const SizedBox(width: AppSpacing.md),
+        const SizedBox(width: AppSpacing.sm),
+        
+        // Smart Lock indicator
+        _buildLockIndicator(theme),
+        
+        const SizedBox(width: AppSpacing.sm),
         
         // Quick action button
         _buildActionButton(theme),
       ],
+    );
+  }
+  
+  Widget _buildLockIndicator(ThemeData theme) {
+    final now = DateTime.now();
+    final startDate = rental.startDate;
+    final endDate = rental.endDate;
+    
+    // Determine lock access status
+    bool canUnlock = false;
+    Color lockColor = AppColors.grey;
+    String tooltip = 'Lock Access';
+    
+    if (startDate != null && endDate != null) {
+      if (now.isAfter(endDate)) {
+        // Rental ended
+        lockColor = Colors.red;
+        tooltip = 'Rental ended';
+      } else if (now.isAfter(startDate) || now.isAtSameMomentAs(startDate)) {
+        // Can unlock normally
+        canUnlock = true;
+        lockColor = Colors.green;
+        tooltip = 'Can unlock';
+      } else {
+        // Not yet started
+        lockColor = Colors.orange;
+        tooltip = 'Starts soon';
+      }
+    }
+    
+    return Container(
+      padding: const EdgeInsets.all(8),
+      decoration: BoxDecoration(
+        color: lockColor.withOpacity(0.1),
+        borderRadius: BorderRadius.circular(8),
+        border: Border.all(color: lockColor.withOpacity(0.3)),
+      ),
+      child: Tooltip(
+        message: tooltip,
+        child: Icon(
+          canUnlock ? Icons.lock_open_rounded : Icons.lock_rounded,
+          size: 18,
+          color: lockColor,
+        ),
+      ),
     );
   }
 

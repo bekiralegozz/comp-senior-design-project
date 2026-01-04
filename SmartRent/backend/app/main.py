@@ -10,24 +10,19 @@ import uvicorn
 
 from app.core.config import settings
 from app.core.middleware import WalletAuthMiddleware
-from app.api.routes import blockchain, nft, wallet_auth
+from app.api.routes import blockchain, nft, wallet_auth, rental, iot
 
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     """Application lifespan management"""
-    try:
-        print("🚀 SmartRent Backend starting up...")
-        print(f"📡 Environment: {settings.ENVIRONMENT}")
-        print(f"🔗 Web3 Provider: {settings.WEB3_PROVIDER_URL[:50]}...")
-        print(f"✅ Active routes: /api/v1/auth, /api/v1/nft, /api/v1/blockchain")
-        print(f"🔐 Auth: SIWE (Sign-In With Ethereum)")
-        yield
-    except Exception as e:
-        print(f"❌ Startup error: {e}")
-        raise
-    finally:
-        print("👋 SmartRent Backend shutting down...")
+    print("🚀 SmartRent Backend starting up...")
+    print(f"📡 Environment: {settings.ENVIRONMENT}")
+    print(f"🔗 Web3 Provider: {settings.WEB3_PROVIDER_URL}")
+    print(f"✅ Active routes: /api/v1/auth, /api/v1/nft, /api/v1/blockchain, /api/v1/rental")
+    print(f"🔐 Auth: SIWE (Sign-In With Ethereum)")
+    yield
+    print("👋 SmartRent Backend shutting down...")
 
 
 app = FastAPI(
@@ -87,6 +82,8 @@ async def root():
 app.include_router(wallet_auth.router, prefix="/api/v1", tags=["Authentication"])
 app.include_router(nft.router, tags=["NFT & Fractional Ownership"])
 app.include_router(blockchain.router, prefix="/api/v1/blockchain", tags=["Blockchain"])
+app.include_router(rental.router, tags=["Rental & Bookings"])
+app.include_router(iot.router, tags=["IoT Devices"])
 
 
 if __name__ == "__main__":

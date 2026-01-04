@@ -36,6 +36,7 @@ class Settings(BaseSettings):
     SMARTRENTHUB_CONTRACT_ADDRESS: str = Field(default="", env="SMARTRENTHUB_CONTRACT_ADDRESS")
     BUILDING1122_CONTRACT_ADDRESS: str = Field(default="", env="BUILDING1122_CONTRACT_ADDRESS")
     RENTAL_MANAGER_CONTRACT_ADDRESS: str = Field(default="", env="RENTAL_MANAGER_CONTRACT_ADDRESS")
+    RENTAL_HUB_CONTRACT_ADDRESS: str = Field(default="", env="RENTAL_HUB_CONTRACT_ADDRESS")
     MARKETPLACE_CONTRACT_ADDRESS: str = Field(default="", env="MARKETPLACE_CONTRACT_ADDRESS")
     
     # IPFS/Pinata Configuration

@@ -5,6 +5,7 @@ import 'package:walletconnect_flutter_v2/walletconnect_flutter_v2.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:url_launcher/url_launcher.dart';
 import '../constants/blockchain_config.dart';
+import '../constants/config.dart'; // AppConfig import
 
 /// Wallet Service - WalletConnect Integration
 /// Handles wallet connection, transaction signing, and blockchain interaction
@@ -43,7 +44,7 @@ class WalletService {
   Future<void> _initializeWalletConnect() async {
     try {
       _web3App = await Web3App.createInstance(
-        projectId: '17a60844bceaf7f347f653e3ead1c165',
+        projectId: AppConfig.walletConnectProjectId, // Reown Project ID
         metadata: const PairingMetadata(
           name: 'SmartRent',
           description: 'Decentralized Real Estate Rental Platform',
@@ -127,18 +128,9 @@ class WalletService {
         print('🔗 WalletConnect URI: $wcUri');
       }
 
-      // 🎯 Platform-specific connection handling
-      if (kIsWeb) {
-        // WEB: Return URI for QR code display
-        if (kDebugMode) {
-          print('📱 Web platform: Show QR code for scanning');
-        }
-      } else {
-        // MOBILE: Launch wallet app via deep link
-        if (kDebugMode) {
-          print('📱 Mobile platform: Launching wallet app...');
-        }
-        await _launchWalletApp(wcUri);
+      // 🎯 Always show QR code for scanning (both web and mobile)
+      if (kDebugMode) {
+        print('📱 Show QR code for scanning');
       }
 
       // Wait for session approval from wallet app

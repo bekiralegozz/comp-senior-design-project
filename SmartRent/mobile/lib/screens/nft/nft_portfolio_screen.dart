@@ -5,6 +5,7 @@ import 'package:go_router/go_router.dart';
 import '../../services/nft_service.dart';
 import '../../services/nft_models.dart';
 import '../../services/api_service.dart';
+import '../../services/rental_service.dart';
 import '../../core/providers/auth_provider.dart';
 import '../../core/providers/wallet_provider.dart';
 import '../../core/providers/asset_provider.dart';
@@ -25,9 +26,11 @@ class NftPortfolioScreen extends ConsumerStatefulWidget {
 
 class _NftPortfolioScreenState extends ConsumerState<NftPortfolioScreen> {
   final NftService _nftService = NftService();
+  final RentalService _rentalService = RentalService();
   List<UserNftHolding> _holdings = [];
   bool _isLoading = true;
   String? _error;
+  Set<int> _tokensWithRentalListings = {}; // Track which tokens have active rental listings
 
   @override
   void initState() {
@@ -51,8 +54,23 @@ class _NftPortfolioScreenState extends ConsumerState<NftPortfolioScreen> {
 
     try {
       final holdings = await _nftService.getUserHoldings(widget.walletAddress!);
+      
+      // Check which tokens have active rental listings
+      final tokensWithListings = <int>{};
+      try {
+        final allListings = await _rentalService.getAllRentalListings();
+        for (final listing in allListings) {
+          if (listing.isActive && listing.owner.toLowerCase() == widget.walletAddress!.toLowerCase()) {
+            tokensWithListings.add(listing.tokenId);
+          }
+        }
+      } catch (e) {
+        print('Error checking rental listings: $e');
+      }
+      
       setState(() {
         _holdings = holdings;
+        _tokensWithRentalListings = tokensWithListings;
         _isLoading = false;
       });
     } catch (e) {
@@ -269,16 +287,78 @@ class _NftPortfolioScreenState extends ConsumerState<NftPortfolioScreen> {
                       Expanded(
                         child: OutlinedButton.icon(
                           onPressed: () => _sellShares(holding),
-                          icon: const Icon(Icons.sell, size: 16),
-                          label: const Text('Sell'),
+                          icon: const Icon(Icons.sell, size: 14),
+                          label: const Text('Sell', style: TextStyle(fontSize: 12)),
+                          style: OutlinedButton.styleFrom(
+                            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 8),
+                          ),
                         ),
                       ),
-                      const SizedBox(width: 8),
+                      const SizedBox(width: 6),
+                      Expanded(
+                        child: Builder(
+                          builder: (context) {
+                            final hasRentalListing = _tokensWithRentalListings.contains(holding.tokenId);
+                            final canRent = holding.isTopShareholder && !hasRentalListing;
+                            
+                            String tooltipMessage;
+                            if (hasRentalListing) {
+                              tooltipMessage = 'Already listed for rent';
+                            } else if (holding.isTopShareholder) {
+                              tooltipMessage = 'List your property for rent';
+                            } else {
+                              tooltipMessage = 'Only the top shareholder can list for rent';
+                            }
+                            
+                            return Tooltip(
+                              message: tooltipMessage,
+                              child: ElevatedButton.icon(
+                                onPressed: canRent
+                                    ? () => _createRentalListing(holding)
+                                    : () {
+                                        ScaffoldMessenger.of(context).showSnackBar(
+                                          SnackBar(
+                                            content: Text(
+                                              hasRentalListing
+                                                  ? 'This property is already listed for rent'
+                                                  : 'Only the top shareholder can list for rent\n'
+                                                    'Your ownership: ${holding.ownershipPercentage.toStringAsFixed(1)}%',
+                                            ),
+                                            backgroundColor: hasRentalListing ? Colors.orange[700] : Colors.grey[700],
+                                            duration: const Duration(seconds: 3),
+                                          ),
+                                        );
+                                      },
+                                icon: Icon(
+                                  hasRentalListing ? Icons.check_circle : Icons.home_work,
+                                  size: 14,
+                                  color: canRent ? Colors.white : Colors.grey[600],
+                                ),
+                                label: Text(
+                                  hasRentalListing ? 'Listed' : 'Rent',
+                                  style: TextStyle(
+                                    fontSize: 12,
+                                    color: canRent ? Colors.white : Colors.grey[600],
+                                  ),
+                                ),
+                                style: ElevatedButton.styleFrom(
+                                  backgroundColor: canRent ? Colors.orange : Colors.grey[300],
+                                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 8),
+                                ),
+                              ),
+                            );
+                          },
+                        ),
+                      ),
+                      const SizedBox(width: 6),
                       Expanded(
                         child: ElevatedButton.icon(
                           onPressed: () => _viewOnOpenSea(holding.tokenId),
-                          icon: const Icon(Icons.open_in_new, size: 16),
-                          label: const Text('OpenSea'),
+                          icon: const Icon(Icons.open_in_new, size: 14),
+                          label: const Text('Sea', style: TextStyle(fontSize: 12)),
+                          style: ElevatedButton.styleFrom(
+                            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 8),
+                          ),
                         ),
                       ),
                     ],
@@ -892,6 +972,254 @@ class _NftPortfolioScreenState extends ConsumerState<NftPortfolioScreen> {
         ),
       ),
     );
+  }
+  
+  // ============================================
+  // RENTAL LISTING CREATION
+  // ============================================
+  
+  void _createRentalListing(UserNftHolding holding) async {
+    final priceController = TextEditingController();
+    
+    final result = await showDialog<double>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: Row(
+          children: [
+            Icon(Icons.home_work, color: Colors.orange[700]),
+            const SizedBox(width: 8),
+            const Text('List Property for Rent'),
+          ],
+        ),
+        content: SingleChildScrollView(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              // Property Info
+              Card(
+                color: Colors.orange[50],
+                child: Padding(
+                  padding: const EdgeInsets.all(12),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        holding.name,
+                        style: const TextStyle(
+                          fontWeight: FontWeight.bold,
+                          fontSize: 16,
+                        ),
+                      ),
+                      const SizedBox(height: 8),
+                      Text('Token ID: #${holding.tokenId}'),
+                      Text('Your Shares: ${holding.shares} / ${holding.totalShares}'),
+                      Text('Ownership: ${holding.ownershipPercentage.toStringAsFixed(1)}%'),
+                    ],
+                  ),
+                ),
+              ),
+              const SizedBox(height: 16),
+              
+              // Property Traits
+              if (holding.location.isNotEmpty || holding.activeDays.isNotEmpty) ...[
+                const Text(
+                  'Property Details:',
+                  style: TextStyle(
+                    fontWeight: FontWeight.bold,
+                    fontSize: 14,
+                  ),
+                ),
+                const SizedBox(height: 8),
+                if (holding.location.isNotEmpty)
+                  Row(
+                    children: [
+                      Icon(Icons.location_on, size: 16, color: Colors.grey[600]),
+                      const SizedBox(width: 4),
+                      Expanded(
+                        child: Text(
+                          holding.location,
+                          style: TextStyle(color: Colors.grey[700]),
+                        ),
+                      ),
+                    ],
+                  ),
+                if (holding.activeDays.isNotEmpty) ...[
+                  const SizedBox(height: 4),
+                  Row(
+                    children: [
+                      Icon(Icons.calendar_today, size: 16, color: Colors.grey[600]),
+                      const SizedBox(width: 4),
+                      Expanded(
+                        child: Text(
+                          'Active Days: ${holding.activeDays}',
+                          style: TextStyle(color: Colors.grey[700]),
+                        ),
+                      ),
+                    ],
+                  ),
+                ],
+                const SizedBox(height: 16),
+              ],
+              
+              // Price Input
+              const Text(
+                'Price per Night (POL):',
+                style: TextStyle(
+                  fontWeight: FontWeight.bold,
+                  fontSize: 14,
+                ),
+              ),
+              const SizedBox(height: 8),
+              TextField(
+                controller: priceController,
+                keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                decoration: InputDecoration(
+                  hintText: 'e.g. 0.5',
+                  prefixIcon: const Icon(Icons.attach_money),
+                  suffixText: 'POL',
+                  border: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                  filled: true,
+                  fillColor: Colors.grey[100],
+                ),
+              ),
+              const SizedBox(height: 8),
+              Text(
+                'Renters will be able to search by location and active days',
+                style: TextStyle(
+                  fontSize: 12,
+                  color: Colors.grey[600],
+                  fontStyle: FontStyle.italic,
+                ),
+              ),
+            ],
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('Cancel'),
+          ),
+          ElevatedButton.icon(
+            onPressed: () {
+              final priceText = priceController.text.trim();
+              if (priceText.isEmpty) {
+                ScaffoldMessenger.of(context).showSnackBar(
+                  const SnackBar(
+                    content: Text('Please enter a price'),
+                    backgroundColor: Colors.red,
+                  ),
+                );
+                return;
+              }
+              final price = double.tryParse(priceText);
+              if (price == null || price <= 0) {
+                ScaffoldMessenger.of(context).showSnackBar(
+                  const SnackBar(
+                    content: Text('Please enter a valid price'),
+                    backgroundColor: Colors.red,
+                  ),
+                );
+                return;
+              }
+              Navigator.pop(context, price);
+            },
+            icon: const Icon(Icons.check),
+            label: const Text('Create Listing'),
+            style: ElevatedButton.styleFrom(
+              backgroundColor: Colors.orange,
+            ),
+          ),
+        ],
+      ),
+    );
+    
+    if (result != null && mounted) {
+      _processRentalListing(holding, result);
+    }
+  }
+  
+  Future<void> _processRentalListing(UserNftHolding holding, double pricePerNight) async {
+    try {
+      final walletService = ref.read(walletServiceProvider);
+      final walletAddress = widget.walletAddress;
+      
+      if (walletAddress == null) {
+        throw Exception('Wallet not connected');
+      }
+      
+      // Show loading dialog
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Preparing rental listing...'),
+            duration: Duration(seconds: 2),
+          ),
+        );
+      }
+      
+      // Prepare transaction from backend
+      final txData = await _rentalService.prepareCreateRentalListing(
+        tokenId: holding.tokenId,
+        pricePerNightPol: pricePerNight,
+        ownerAddress: walletAddress,
+      );
+      
+      if (txData['success'] != true) {
+        throw Exception(txData['error'] ?? 'Failed to prepare rental listing');
+      }
+      
+      final contractAddress = txData['contract_address'] as String;
+      final functionData = txData['function_data'] as String;
+      
+      // Send transaction via WalletConnect
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Creating rental listing...'),
+            duration: Duration(seconds: 2),
+          ),
+        );
+      }
+      
+      final txHash = await walletService.sendTransaction(
+        to: contractAddress,
+        value: EtherAmount.zero(),
+        data: functionData.startsWith('0x') ? functionData : '0x$functionData',
+        gas: 500000,
+      );
+      
+      if (!mounted) return;
+      
+      // Show success message
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            '✅ Rental listing created!\n'
+            'Price: $pricePerNight POL/night\n'
+            'TX: ${txHash.substring(0, 10)}...',
+          ),
+          backgroundColor: Colors.green,
+          duration: const Duration(seconds: 5),
+        ),
+      );
+      
+      // Refresh holdings
+      await _loadHoldings();
+      
+    } catch (e) {
+      if (!mounted) return;
+      
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('❌ Failed to create rental listing: $e'),
+          backgroundColor: Colors.red,
+          duration: const Duration(seconds: 5),
+        ),
+      );
+    }
   }
 }
 

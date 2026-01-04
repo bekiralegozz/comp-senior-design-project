@@ -9,6 +9,7 @@ import '../components/rental_card.dart';
 import '../core/providers/auth_provider.dart';
 import '../core/providers/rental_provider.dart';
 import '../core/providers/wallet_provider.dart';
+import 'smart_lock_screen.dart';
 
 /// ==========================================================
 /// RENTAL SCREEN - BLOCKCHAIN MIGRATION VERSION
@@ -92,6 +93,37 @@ class _RentalScreenState extends ConsumerState<RentalScreen>
       appBar: AppBar(
         title: const Text('Rental Details'),
         actions: [
+          // Smart Lock Button
+          IconButton(
+            icon: Container(
+              padding: const EdgeInsets.all(8),
+              decoration: BoxDecoration(
+                color: Colors.blue.withOpacity(0.1),
+                shape: BoxShape.circle,
+              ),
+              child: const Icon(
+                Icons.lock_rounded,
+                color: Colors.blue,
+                size: 20,
+              ),
+            ),
+            tooltip: 'Smart Lock',
+            onPressed: () {
+              final rental = ref.read(rentalDetailProvider(widget.rentalId!)).rental;
+              if (rental != null) {
+                Navigator.push(
+                  context,
+                  MaterialPageRoute(
+                    builder: (context) => SmartLockScreen(rental: rental),
+                  ),
+                );
+              } else {
+                ScaffoldMessenger.of(context).showSnackBar(
+                  const SnackBar(content: Text('Rental details not loaded yet')),
+                );
+              }
+            },
+          ),
           IconButton(
             icon: const Icon(Icons.share),
             onPressed: () {
@@ -569,6 +601,32 @@ class _RentalScreenState extends ConsumerState<RentalScreen>
           'Actions',
           style: theme.textTheme.titleLarge?.copyWith(
             fontWeight: FontWeight.bold,
+          ),
+        ),
+        const SizedBox(height: AppSpacing.md),
+        
+        // Smart Lock Button - Primary Action
+        SizedBox(
+          width: double.infinity,
+          child: ElevatedButton.icon(
+            onPressed: () {
+              Navigator.push(
+                context,
+                MaterialPageRoute(
+                  builder: (context) => SmartLockScreen(rental: rental),
+                ),
+              );
+            },
+            icon: const Icon(Icons.lock_open_rounded),
+            label: const Text('Unlock Door'),
+            style: ElevatedButton.styleFrom(
+              backgroundColor: Colors.blue,
+              foregroundColor: Colors.white,
+              padding: const EdgeInsets.symmetric(vertical: 16),
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(12),
+              ),
+            ),
           ),
         ),
         const SizedBox(height: AppSpacing.md),

@@ -5,6 +5,7 @@ import "@openzeppelin/contracts/access/Ownable.sol";
 import "@openzeppelin/contracts/utils/ReentrancyGuard.sol";
 import "@openzeppelin/contracts/utils/Pausable.sol";
 import "@openzeppelin/contracts/token/ERC1155/IERC1155.sol";
+import "./interfaces/IRentalHub.sol";
 
 /**
  * @title SmartRentHub
@@ -41,14 +42,14 @@ contract SmartRentHub is Ownable, ReentrancyGuard, Pausable {
      * @dev Listing information for marketplace
      */
     struct Listing {
-        uint256 listingId;
-        uint256 tokenId;
-        address seller;
-        uint256 sharesForSale;      // Total shares listed
-        uint256 sharesRemaining;    // Remaining shares available
-        uint256 pricePerShare;      // Price in wei (POL) per share
-        bool isActive;
-        uint256 createdAt;
+        uint64 listingId;           // Max 18 quintillion listings (enough!)
+        uint64 tokenId;             // Max 18 quintillion tokens (enough!)
+        uint64 sharesForSale;       // Max 18 quintillion shares (enough!)
+        uint64 sharesRemaining;     // Max 18 quintillion shares (enough!)
+        address seller;             // 20 bytes (160 bits)
+        bool isActive;              // 1 byte (8 bits)
+        uint128 pricePerShare;      // Max ~3.4e38 wei (more than enough!)
+        uint64 createdAt;           // Unix timestamp until year 584 billion
     }
     
     /**
@@ -66,15 +67,15 @@ contract SmartRentHub is Ownable, ReentrancyGuard, Pausable {
      * @dev Combined listing info with asset details (for view functions)
      */
     struct ListingWithAsset {
-        uint256 listingId;
-        uint256 tokenId;
+        uint64 listingId;
+        uint64 tokenId;
         address seller;
-        uint256 sharesForSale;
-        uint256 sharesRemaining;
-        uint256 pricePerShare;
-        uint256 createdAt;
+        uint64 sharesForSale;
+        uint64 sharesRemaining;
+        uint128 pricePerShare;
+        uint64 createdAt;
         string metadataURI;
-        uint256 totalShares;
+        uint64 totalShares;
     }
     
     // ============================================
@@ -83,6 +84,9 @@ contract SmartRentHub is Ownable, ReentrancyGuard, Pausable {
     
     // Building1122 token contract address
     address public buildingToken;
+    
+    // RentalHub contract address (for rental listing management notifications)
+    address public rentalHub;
     
     // Mapping from tokenId to AssetInfo
     mapping(uint256 => AssetInfo) public assets;
@@ -212,6 +216,15 @@ contract SmartRentHub is Ownable, ReentrancyGuard, Pausable {
     }
     
     /**
+     * @dev Set the RentalHub contract address
+     * @param _rentalHub Address of the RentalHub contract
+     */
+    function setRentalHub(address _rentalHub) external onlyOwner {
+        require(_rentalHub != address(0), "SmartRentHub: invalid rental hub address");
+        rentalHub = _rentalHub;
+    }
+    
+    /**
      * @dev Set platform fee (max 10%)
      * @param newFeeBps New fee in basis points
      */
@@ -285,17 +298,22 @@ contract SmartRentHub is Ownable, ReentrancyGuard, Pausable {
     }
     
     /**
-     * @dev Update ownership on transfer (called by Building1122 on every transfer)
+     * @dev Update ownership with BEFORE-transfer top shareholder (called by Building1122)
      * @param tokenId The token ID being transferred
      * @param from Sender address (address(0) for mint)
      * @param to Receiver address (address(0) for burn)
      * @param amount Amount of shares transferred
+     * @param previousTopShareholder The top shareholder BEFORE transfer (from Building1122)
+     * 
+     * CRITICAL: Building1122 must calculate previousTopShareholder BEFORE executing
+     * the transfer, so we can properly detect changes for rental listing deactivation.
      */
-    function updateOwnership(
+    function updateOwnershipWithPrevious(
         uint256 tokenId,
         address from,
         address to,
-        uint256 amount
+        uint256 amount,
+        address previousTopShareholder
     ) external onlyBuildingToken whenNotPaused {
         // Skip if asset not registered (shouldn't happen, but safety check)
         if (!assets[tokenId].exists) return;
@@ -317,6 +335,65 @@ contract SmartRentHub is Ownable, ReentrancyGuard, Pausable {
                 _addOwner(tokenId, to);
             }
         }
+        
+        // Get top shareholder AFTER transfer (balances already updated)
+        (address newTopShareholder, ) = getTopShareholder(tokenId);
+        
+        // If top shareholder has changed, notify RentalHub to deactivate old listings
+        if (rentalHub != address(0) && 
+            previousTopShareholder != newTopShareholder && 
+            previousTopShareholder != address(0)) {
+            
+            // Call RentalHub to deactivate listings (with try/catch for safety)
+            try IRentalHub(rentalHub).onTopShareholderChanged(
+                tokenId,
+                previousTopShareholder,
+                newTopShareholder
+            ) {
+                // Success - old listings deactivated
+            } catch {
+                // Silently fail - ownership update still succeeds
+                // This prevents failed rental hub calls from blocking transfers
+            }
+        }
+        
+        emit OwnershipUpdated(tokenId, from, to, amount);
+    }
+    
+    /**
+     * @dev DEPRECATED: Use updateOwnershipWithPrevious instead
+     * Kept for backwards compatibility during migration
+     */
+    function updateOwnership(
+        uint256 tokenId,
+        address from,
+        address to,
+        uint256 amount
+    ) external onlyBuildingToken whenNotPaused {
+        // Inline implementation (can't call external function internally)
+        // Skip if asset not registered
+        if (!assets[tokenId].exists) return;
+        
+        // Skip zero amount
+        if (amount == 0) return;
+        
+        // Handle sender (remove from owners if balance becomes 0)
+        if (from != address(0)) {
+            uint256 fromBalance = IERC1155(buildingToken).balanceOf(from, tokenId);
+            if (fromBalance == 0) {
+                _removeOwner(tokenId, from);
+            }
+        }
+        
+        // Handle receiver (add to owners if not already)
+        if (to != address(0)) {
+            if (!_isOwner[tokenId][to]) {
+                _addOwner(tokenId, to);
+            }
+        }
+        
+        // Note: This deprecated function won't trigger rental listing deactivation
+        // Use updateOwnershipWithPrevious for that functionality
         
         emit OwnershipUpdated(tokenId, from, to, amount);
     }
@@ -353,14 +430,14 @@ contract SmartRentHub is Ownable, ReentrancyGuard, Pausable {
         // Create listing
         listingId = nextListingId++;
         listings[listingId] = Listing({
-            listingId: listingId,
-            tokenId: tokenId,
+            listingId: uint64(listingId),
+            tokenId: uint64(tokenId),
             seller: msg.sender,
-            sharesForSale: sharesForSale,
-            sharesRemaining: sharesForSale,
-            pricePerShare: pricePerShare,
+            sharesForSale: uint64(sharesForSale),
+            sharesRemaining: uint64(sharesForSale),
+            pricePerShare: uint128(pricePerShare),
             isActive: true,
-            createdAt: block.timestamp
+            createdAt: uint64(block.timestamp)
         });
         
         // Add to active listings
@@ -414,7 +491,7 @@ contract SmartRentHub is Ownable, ReentrancyGuard, Pausable {
         uint256 sellerPayment = totalPrice - platformFee;
         
         // Update listing
-        listing.sharesRemaining -= sharesToBuy;
+        listing.sharesRemaining -= uint64(sharesToBuy);
         if (listing.sharesRemaining == 0) {
             listing.isActive = false;
             _removeFromActiveListings(listingId);
@@ -537,6 +614,47 @@ contract SmartRentHub is Ownable, ReentrancyGuard, Pausable {
         return _isOwner[tokenId][account];
     }
     
+    /**
+     * @dev Get the top shareholder (highest balance holder) for an asset
+     * @param tokenId The asset token ID
+     * @return topHolder The address with the most shares
+     * @return topBalance The balance of the top holder
+     */
+    function getTopShareholder(uint256 tokenId) public view returns (address topHolder, uint256 topBalance) {
+        require(assets[tokenId].exists, "SmartRentHub: asset does not exist");
+        require(buildingToken != address(0), "SmartRentHub: building token not set");
+        
+        address[] memory owners = _assetOwners[tokenId];
+        IERC1155 token = IERC1155(buildingToken);
+        
+        topHolder = address(0);
+        topBalance = 0;
+        
+        for (uint256 i = 0; i < owners.length; i++) {
+            uint256 balance = token.balanceOf(owners[i], tokenId);
+            if (balance > topBalance) {
+                topBalance = balance;
+                topHolder = owners[i];
+            }
+        }
+        
+        return (topHolder, topBalance);
+    }
+    
+    /**
+     * @dev Check if an address is the majority shareholder (has the most shares)
+     * @param account The address to check
+     * @param tokenId The asset token ID
+     * @return True if account has the highest balance, false otherwise
+     */
+    function isMajorityShareholder(address account, uint256 tokenId) public view returns (bool) {
+        require(assets[tokenId].exists, "SmartRentHub: asset does not exist");
+        require(buildingToken != address(0), "SmartRentHub: building token not set");
+        
+        (address topHolder, ) = getTopShareholder(tokenId);
+        return account == topHolder;
+    }
+    
     // ============================================
     // VIEW FUNCTIONS - MARKETPLACE
     // ============================================
@@ -582,7 +700,7 @@ contract SmartRentHub is Ownable, ReentrancyGuard, Pausable {
                 pricePerShare: listing.pricePerShare,
                 createdAt: listing.createdAt,
                 metadataURI: asset.metadataURI,
-                totalShares: asset.totalShares
+                totalShares: uint64(asset.totalShares)
             });
         }
         

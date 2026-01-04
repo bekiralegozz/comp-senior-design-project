@@ -88,13 +88,8 @@ class WalletConnectButton extends ConsumerWidget {
   ) {
     return ElevatedButton.icon(
       onPressed: () async {
-        if (kIsWeb) {
-          // WEB: Show QR code dialog first
-          await _showWebConnectDialog(context, notifier);
-        } else {
-          // MOBILE: Show connecting dialog and launch wallet
-          await _showMobileConnectDialog(context, notifier);
-        }
+        // Always show QR code dialog (same as web)
+        await _showWebConnectDialog(context, notifier);
       },
       icon: const Icon(Icons.account_balance_wallet),
       label: const Text('Connect Wallet'),

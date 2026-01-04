@@ -1,13 +1,10 @@
 {
-  "smartRentHub": "0xE579A3e8D770A5C52CCa1C2c08Ab1547757Be6D9",
-  "building1122": "0xC37a4625641A8481127A3F129c8985857ee92CaB",
-  "rentalManager": "0x7732B578B9CF47D4B725B54F6db43cBf51945E46",
-  "deployer": "0x7dCC13517a1f9238FA532629341cBFac5B9d8838",
-  "network": "polygon",
-  "chainId": 137,
-  "deployedAt": "2025-12-18T15:29:13.273Z",
-  "crossReferences": {
-    "Building1122.smartRentHub": "0xE579A3e8D770A5C52CCa1C2c08Ab1547757Be6D9",
-    "SmartRentHub.buildingToken": "0xC37a4625641A8481127A3F129c8985857ee92CaB"
+  "network": "polygon-mainnet",
+  "deployer": "0x6fdEdaeC6C483f4c641CDE5b96B1f1858D2572D9",
+  "timestamp": "2026-01-04T00:25:11.334Z",
+  "contracts": {
+    "Building1122": "0xC1BaB914b2ad7762E9174c7BD76cf48884F48B9c",
+    "SmartRentHub": "0x1bd8D0f166A53d6173E549B408a76625404d8CB6",
+    "RentalHub": "0x1240d30b7fBa73F1Ad5C15ecb6f2eF30AD2e9008"
   }
 }

@@ -8,8 +8,9 @@ module.exports = {
     settings: {
       optimizer: {
         enabled: true,
-        runs: 200
-      }
+        runs: 10000 // Maksimum optimize - deployment çok ucuzlar
+      },
+      viaIR: true // Daha agresif Yul optimizer
     }
   },
   networks: {
@@ -17,8 +18,13 @@ module.exports = {
       url: process.env.POLYGON_RPC_URL || "https://polygon-rpc.com",
       accounts: process.env.WALLET_PRIVATE_KEY ? [process.env.WALLET_PRIVATE_KEY] : [],
       chainId: 137,
-      gasPrice: 100000000000, // 100 gwei (daha yüksek)
-      timeout: 300000 // 5 dakika timeout
+      // Gas price: AUTO (Infura otomatik belirliyor)
+      gas: 8000000,
+      timeout: 600000, // 10 dakika
+      confirmations: 2, // 2 confirmation (güvenli)
+      httpHeaders: {
+        'User-Agent': 'hardhat'
+      }
     },
     hardhat: {
       chainId: 1337
