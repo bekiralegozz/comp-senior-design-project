@@ -53,8 +53,8 @@ class Web3Service:
     def _load_contract_abi(self, contract_name: str) -> List:
         """Load contract ABI from abis folder"""
         try:
-            # Try backend/abis folder first (for Docker deployment)
-            abi_path = Path(__file__).parent.parent.parent / "abis" / f"{contract_name}.json"
+            # Try backend/app/abis folder first (for Railway deployment)
+            abi_path = Path(__file__).parent.parent / "abis" / f"{contract_name}.json"
             
             if abi_path.exists():
                 with open(abi_path, 'r') as f:
@@ -64,7 +64,16 @@ class Web3Service:
                         return contract_data
                     return contract_data.get('abi', [])
             
-            # Fallback to old path (hardhat artifacts)
+            # Try blockchain/abis folder (for local development)
+            abi_path = Path(__file__).parent.parent.parent.parent / "blockchain" / "abis" / f"{contract_name}.json"
+            if abi_path.exists():
+                with open(abi_path, 'r') as f:
+                    contract_data = json.load(f)
+                    if isinstance(contract_data, list):
+                        return contract_data
+                    return contract_data.get('abi', [])
+            
+            # Fallback to hardhat artifacts
             abi_path = Path(__file__).parent.parent.parent.parent / "blockchain" / "artifacts" / "contracts" / f"{contract_name}.sol" / f"{contract_name}.json"
             if abi_path.exists():
                 with open(abi_path, 'r') as f:
