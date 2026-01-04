@@ -19,7 +19,7 @@ class Settings(BaseSettings):
     # API
     API_V1_STR: str = "/api/v1"
     ALLOWED_ORIGINS: List[str] = Field(
-        default=["http://localhost:3000", "http://localhost:8080", "http://localhost:8081", "http://127.0.0.1:8080", "http://127.0.0.1:8081"],
+        default=["http://localhost:3000", "http://localhost:8080", "http://localhost:8081", "http://127.0.0.1:8080", "http://127.0.0.1:8081", "*"],
         env="ALLOWED_ORIGINS"
     )
     
