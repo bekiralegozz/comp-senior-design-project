@@ -32,8 +32,8 @@ from machine import Pin, PWM
 
 CONFIG = {
     # WiFi Settings
-    'WIFI_SSID': 'YOUR_WIFI_SSID',
-    'WIFI_PASSWORD': 'YOUR_WIFI_PASSWORD',
+    'WIFI_SSID': 'Berk',
+    'WIFI_PASSWORD': 'Berk1234',
     
     # Backend Settings
     # Local development:
@@ -42,7 +42,7 @@ CONFIG = {
     'BACKEND_URL': 'https://lucky-beauty-production-e86e.up.railway.app',
     
     # Device Identity
-    'DEVICE_ID': 'ESP32-ROOM-101',
+    'DEVICE_ID': 'SmartLocak-001',
     'DEVICE_TYPE': 'smart_lock',
     'FIRMWARE_VERSION': '1.0.0',
     

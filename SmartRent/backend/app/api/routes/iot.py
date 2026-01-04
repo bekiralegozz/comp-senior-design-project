@@ -13,7 +13,7 @@ from typing import Optional, Dict, List
 from datetime import datetime, timedelta
 import asyncio
 
-router = APIRouter(prefix="/api/v1/iot", tags=["IoT Devices"])
+router = APIRouter(prefix="/iot", tags=["IoT Devices"])
 
 # ============================================
 # IN-MEMORY STORAGE
