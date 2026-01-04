@@ -50,8 +50,17 @@ class RentalHubService:
     def _load_abi(self) -> List:
         """Load RentalHub ABI from abis folder"""
         try:
-            abi_path = Path(__file__).parent.parent.parent.parent / "blockchain" / "abis" / "RentalHub.json"
+            # First try backend/app/abis (for Railway deployment)
+            abi_path = Path(__file__).parent.parent / "abis" / "RentalHub.json"
+            if abi_path.exists():
+                with open(abi_path, 'r') as f:
+                    contract_data = json.load(f)
+                    if isinstance(contract_data, list):
+                        return contract_data
+                    return contract_data.get('abi', [])
             
+            # Fallback to blockchain/abis (for local development)
+            abi_path = Path(__file__).parent.parent.parent.parent / "blockchain" / "abis" / "RentalHub.json"
             if abi_path.exists():
                 with open(abi_path, 'r') as f:
                     contract_data = json.load(f)
@@ -187,6 +196,16 @@ class RentalHubService:
     def _load_smartrenthub_abi(self) -> List:
         """Load SmartRentHub ABI"""
         try:
+            # First try backend/app/abis (for Railway deployment)
+            abi_path = Path(__file__).parent.parent / "abis" / "SmartRentHub.json"
+            if abi_path.exists():
+                with open(abi_path, 'r') as f:
+                    contract_data = json.load(f)
+                    if isinstance(contract_data, list):
+                        return contract_data
+                    return contract_data.get('abi', [])
+            
+            # Fallback to blockchain/abis (for local development)
             abi_path = Path(__file__).parent.parent.parent.parent / "blockchain" / "abis" / "SmartRentHub.json"
             if abi_path.exists():
                 with open(abi_path, 'r') as f:
@@ -641,8 +660,17 @@ class RentalHubService:
     def _load_building_abi(self) -> List:
         """Load Building1122 ABI"""
         try:
-            abi_path = Path(__file__).parent.parent.parent.parent / "blockchain" / "abis" / "Building1122.json"
+            # First try backend/app/abis (for Railway deployment)
+            abi_path = Path(__file__).parent.parent / "abis" / "Building1122.json"
+            if abi_path.exists():
+                with open(abi_path, 'r') as f:
+                    contract_data = json.load(f)
+                    if isinstance(contract_data, list):
+                        return contract_data
+                    return contract_data.get('abi', [])
             
+            # Fallback to blockchain/abis (for local development)
+            abi_path = Path(__file__).parent.parent.parent.parent / "blockchain" / "abis" / "Building1122.json"
             if abi_path.exists():
                 with open(abi_path, 'r') as f:
                     contract_data = json.load(f)
