@@ -10,7 +10,7 @@ import uvicorn
 
 from app.core.config import settings
 from app.core.middleware import WalletAuthMiddleware
-from app.api.routes import blockchain, nft, wallet_auth, rental
+from app.api.routes import blockchain, nft, wallet_auth, rental, iot
 
 
 @asynccontextmanager
@@ -83,6 +83,7 @@ app.include_router(wallet_auth.router, prefix="/api/v1", tags=["Authentication"]
 app.include_router(nft.router, tags=["NFT & Fractional Ownership"])
 app.include_router(blockchain.router, prefix="/api/v1/blockchain", tags=["Blockchain"])
 app.include_router(rental.router, tags=["Rental & Bookings"])
+app.include_router(iot.router, tags=["IoT Devices"])
 
 
 if __name__ == "__main__":

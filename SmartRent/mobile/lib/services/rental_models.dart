@@ -156,7 +156,8 @@ class Rental {
       renter: json['renter'] ?? '',
       checkInDate: json['check_in_date'] ?? json['checkInDate'] ?? 0,
       checkOutDate: json['check_out_date'] ?? json['checkOutDate'] ?? 0,
-      totalPrice: json['total_price']?.toString() ?? 
+      totalPrice: json['total_price_pol']?.toString() ??
+                  json['total_price']?.toString() ?? 
                   json['totalPrice']?.toString() ?? '0',
       createdAt: json['created_at'] ?? json['createdAt'] ?? 0,
       status: parseStatus(json['status']),

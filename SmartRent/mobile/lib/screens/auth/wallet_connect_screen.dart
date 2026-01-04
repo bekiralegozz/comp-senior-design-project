@@ -157,8 +157,8 @@ class _WalletConnectScreenState extends ConsumerState<WalletConnectScreen> {
                 ),
                 const SizedBox(height: 32),
 
-                // QR Code (Web only) - Show when wcUri is available
-                if (kIsWeb && authState.wcUri != null && authState.wcUri!.isNotEmpty) ...[
+                // QR Code - Show when wcUri is available (both web and mobile)
+                if (authState.wcUri != null && authState.wcUri!.isNotEmpty) ...[
                   Card(
                     elevation: 2,
                     child: Padding(

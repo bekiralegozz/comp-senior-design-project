@@ -131,6 +131,19 @@ contract RentalHub is Ownable, ReentrancyGuard, Pausable {
     address public feeRecipient;
     
     // ============================================
+    // IOT DEVICE REGISTRY
+    // ============================================
+    
+    // Mapping from tokenId (asset) to deviceId (ESP32)
+    mapping(uint256 => string) public assetToDevice;
+    
+    // Mapping from deviceId to tokenId
+    mapping(string => uint256) public deviceToAsset;
+    
+    // Mapping to check if device is registered to any asset
+    mapping(string => bool) public deviceRegistered;
+    
+    // ============================================
     // EVENTS
     // ============================================
     
@@ -172,6 +185,19 @@ contract RentalHub is Ownable, ReentrancyGuard, Pausable {
     event FeeRecipientUpdated(address indexed newRecipient);
     event BuildingTokenUpdated(address indexed newToken);
     event SmartRentHubUpdated(address indexed newHub);
+    
+    // Device Registry Events
+    event DeviceRegistered(
+        uint256 indexed tokenId,
+        string deviceId,
+        address indexed registeredBy
+    );
+    
+    event DeviceUnregistered(
+        uint256 indexed tokenId,
+        string deviceId,
+        address indexed unregisteredBy
+    );
     
     // ============================================
     // CONSTRUCTOR
@@ -716,6 +742,133 @@ contract RentalHub is Ownable, ReentrancyGuard, Pausable {
         
         _activeRentalListingIds.pop();
         delete _activeRentalListingIndex[listingId];
+    }
+    
+    // ============================================
+    // IOT DEVICE REGISTRY FUNCTIONS
+    // ============================================
+    
+    /**
+     * @dev Register an IoT device (ESP32) to an asset
+     * Only the majority shareholder of the asset can register a device
+     * @param tokenId The asset token ID
+     * @param deviceId The unique device identifier (e.g., "ESP32-ROOM-101")
+     */
+    function registerDevice(
+        uint256 tokenId,
+        string calldata deviceId
+    ) external whenNotPaused {
+        require(bytes(deviceId).length > 0, "RentalHub: deviceId cannot be empty");
+        require(bytes(deviceId).length <= 64, "RentalHub: deviceId too long");
+        require(!deviceRegistered[deviceId], "RentalHub: device already registered");
+        require(bytes(assetToDevice[tokenId]).length == 0, "RentalHub: asset already has device");
+        
+        // Only majority shareholder can register device
+        require(
+            isMajorityShareholder(msg.sender, tokenId),
+            "RentalHub: only majority shareholder can register device"
+        );
+        
+        // Register device
+        assetToDevice[tokenId] = deviceId;
+        deviceToAsset[deviceId] = tokenId;
+        deviceRegistered[deviceId] = true;
+        
+        emit DeviceRegistered(tokenId, deviceId, msg.sender);
+    }
+    
+    /**
+     * @dev Unregister an IoT device from an asset
+     * Only the majority shareholder or contract owner can unregister
+     * @param tokenId The asset token ID
+     */
+    function unregisterDevice(uint256 tokenId) external whenNotPaused {
+        string memory deviceId = assetToDevice[tokenId];
+        require(bytes(deviceId).length > 0, "RentalHub: no device registered");
+        
+        // Only majority shareholder or owner can unregister
+        require(
+            isMajorityShareholder(msg.sender, tokenId) || msg.sender == owner(),
+            "RentalHub: not authorized to unregister"
+        );
+        
+        // Clear mappings
+        delete deviceToAsset[deviceId];
+        delete deviceRegistered[deviceId];
+        delete assetToDevice[tokenId];
+        
+        emit DeviceUnregistered(tokenId, deviceId, msg.sender);
+    }
+    
+    /**
+     * @dev Check if a user is authorized to unlock a device
+     * User must have an active rental for the asset that:
+     * 1. Is in Active status
+     * 2. Current time is within check-in and check-out dates
+     * @param deviceId The device identifier
+     * @param user The user's wallet address
+     * @return authorized True if user can unlock
+     * @return rentalId The rental ID that authorizes access (0 if not authorized)
+     */
+    function isAuthorizedToUnlock(
+        string calldata deviceId,
+        address user
+    ) external view returns (bool authorized, uint256 rentalId) {
+        // Check device is registered
+        if (!deviceRegistered[deviceId]) {
+            return (false, 0);
+        }
+        
+        // Get the asset for this device
+        uint256 tokenId = deviceToAsset[deviceId];
+        
+        // Get all rentals for this asset
+        uint256[] memory rentalIds = _assetToRentals[tokenId];
+        
+        // Current timestamp
+        uint256 currentTime = block.timestamp;
+        
+        // Check each rental
+        for (uint256 i = 0; i < rentalIds.length; i++) {
+            Rental storage rental = rentals[rentalIds[i]];
+            
+            // Check if this rental belongs to the user and is active
+            if (rental.renter == user && 
+                rental.status == RentalStatus.Active &&
+                currentTime >= rental.checkInDate &&
+                currentTime < rental.checkOutDate) {
+                return (true, rental.rentalId);
+            }
+        }
+        
+        return (false, 0);
+    }
+    
+    /**
+     * @dev Get device ID for an asset
+     * @param tokenId The asset token ID
+     * @return deviceId The registered device ID (empty string if none)
+     */
+    function getDeviceByAsset(uint256 tokenId) external view returns (string memory) {
+        return assetToDevice[tokenId];
+    }
+    
+    /**
+     * @dev Get asset token ID for a device
+     * @param deviceId The device identifier
+     * @return tokenId The asset token ID (0 if not registered)
+     */
+    function getAssetByDevice(string calldata deviceId) external view returns (uint256) {
+        return deviceToAsset[deviceId];
+    }
+    
+    /**
+     * @dev Check if a device is registered
+     * @param deviceId The device identifier
+     * @return True if device is registered to an asset
+     */
+    function isDeviceRegistered(string calldata deviceId) external view returns (bool) {
+        return deviceRegistered[deviceId];
     }
     
     // ============================================

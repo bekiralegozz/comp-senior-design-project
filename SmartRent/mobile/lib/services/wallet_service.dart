@@ -128,18 +128,9 @@ class WalletService {
         print('🔗 WalletConnect URI: $wcUri');
       }
 
-      // 🎯 Platform-specific connection handling
-      if (kIsWeb) {
-        // WEB: Return URI for QR code display
-        if (kDebugMode) {
-          print('📱 Web platform: Show QR code for scanning');
-        }
-      } else {
-        // MOBILE: Launch wallet app via deep link
-        if (kDebugMode) {
-          print('📱 Mobile platform: Launching wallet app...');
-        }
-        await _launchWalletApp(wcUri);
+      // 🎯 Always show QR code for scanning (both web and mobile)
+      if (kDebugMode) {
+        print('📱 Show QR code for scanning');
       }
 
       // Wait for session approval from wallet app
