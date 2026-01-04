@@ -2,21 +2,23 @@
 fastapi==0.104.1
 uvicorn[standard]==0.24.0
 python-dotenv==1.0.0
-pydantic==2.5.0
+pydantic>=2.7.0
 pydantic-settings==2.1.0
 
 # Web3 and Blockchain
-web3==6.11.3
-eth-account==0.10.0
+web3>=6.17.0
+eth-account>=0.11.0
+siwe>=4.0.0
 
 # HTTP Client
-httpx>=0.24.0,<0.25.0
+httpx>=0.24.0
 aiohttp==3.9.1
 
 # Authentication and Security
 python-jose[cryptography]==3.3.0
 passlib[bcrypt]==1.7.4
 python-multipart==0.0.6
+PyJWT>=2.0.0
 
 # Utilities
 python-dateutil==2.8.2
