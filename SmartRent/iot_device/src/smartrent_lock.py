@@ -37,9 +37,9 @@ CONFIG = {
     
     # Backend Settings
     # Local development:
-    'BACKEND_URL': 'http://192.168.1.100:8000',
-    # Railway production (update after deploy):
-    # 'BACKEND_URL': 'https://smartrent-backend.up.railway.app',
+    # 'BACKEND_URL': 'http://192.168.1.100:8000',
+    # Railway production:
+    'BACKEND_URL': 'https://lucky-beauty-production-e86e.up.railway.app',
     
     # Device Identity
     'DEVICE_ID': 'ESP32-ROOM-101',
