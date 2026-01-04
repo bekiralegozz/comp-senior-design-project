@@ -39,10 +39,63 @@ class _SmartLockScreenState extends State<SmartLockScreen>
   bool _showSuccess = false;
   String? _deviceId;
   IoTDeviceInfo? _deviceStatus;
+  bool _isLoadingDevice = true;
+  String? _deviceError;
   
   // Services
   final IoTService _iotService = IoTService();
   final WalletService _walletService = WalletService();
+  
+  /// Load the device linked to this rental's asset
+  Future<void> _loadLinkedDevice() async {
+    setState(() {
+      _isLoadingDevice = true;
+      _deviceError = null;
+    });
+    
+    try {
+      // Get asset ID from rental
+      final assetId = widget.rental.assetId;
+      if (assetId == null) {
+        setState(() {
+          _deviceError = 'No asset ID found for this rental';
+          _isLoadingDevice = false;
+        });
+        return;
+      }
+      
+      // Try to parse as int
+      final assetIdInt = int.tryParse(assetId.toString());
+      if (assetIdInt == null) {
+        setState(() {
+          _deviceError = 'Invalid asset ID';
+          _isLoadingDevice = false;
+        });
+        return;
+      }
+      
+      // Fetch device from backend
+      final device = await _iotService.getDeviceByAsset(assetIdInt);
+      
+      if (device != null) {
+        setState(() {
+          _deviceId = device.deviceId;
+          _deviceStatus = device;
+          _isLoadingDevice = false;
+        });
+      } else {
+        setState(() {
+          _deviceError = 'No smart lock device linked to this property';
+          _isLoadingDevice = false;
+        });
+      }
+    } catch (e) {
+      setState(() {
+        _deviceError = 'Failed to load device: $e';
+        _isLoadingDevice = false;
+      });
+    }
+  }
   
   // Animation controllers
   late AnimationController _pulseController;
@@ -55,6 +108,9 @@ class _SmartLockScreenState extends State<SmartLockScreen>
   @override
   void initState() {
     super.initState();
+    
+    // Load device for this rental's asset
+    _loadLinkedDevice();
     
     // Pulse animation for the lock ring
     _pulseController = AnimationController(
@@ -112,6 +168,32 @@ class _SmartLockScreenState extends State<SmartLockScreen>
   Future<void> _unlockDoor({bool adminOverride = false}) async {
     if (_isProcessing) return;
     
+    // Check if device is loaded
+    if (_deviceId == null) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(_deviceError ?? 'No device linked to this property'),
+            backgroundColor: Colors.orange,
+          ),
+        );
+      }
+      return;
+    }
+    
+    // Check if device is online
+    if (_deviceStatus != null && !_deviceStatus!.online) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Device is offline. Please check the smart lock.'),
+            backgroundColor: Colors.orange,
+          ),
+        );
+      }
+      return;
+    }
+    
     // Get wallet address
     final walletAddress = _walletService.getAddress();
     if (walletAddress == null) {
@@ -126,11 +208,6 @@ class _SmartLockScreenState extends State<SmartLockScreen>
       return;
     }
     
-    // Get device ID from rental's asset
-    // For now, use a placeholder device ID based on rental
-    // In production, this should come from blockchain (RentalHub.getDeviceByAsset)
-    final deviceId = _deviceId ?? 'ESP32-ROOM-${widget.rental.assetId ?? "101"}';
-    
     setState(() {
       _isProcessing = true;
     });
@@ -140,7 +217,7 @@ class _SmartLockScreenState extends State<SmartLockScreen>
     
     try {
       // Call backend API to unlock the door
-      final result = await _iotService.requestUnlock(deviceId, walletAddress);
+      final result = await _iotService.requestUnlock(_deviceId!, walletAddress);
       
       if (result.success) {
         // Success!
@@ -393,62 +470,138 @@ class _SmartLockScreenState extends State<SmartLockScreen>
         borderRadius: BorderRadius.circular(16),
         border: Border.all(color: Colors.white.withOpacity(0.1)),
       ),
-      child: Row(
+      child: Column(
         children: [
-          Container(
-            width: 50,
-            height: 50,
-            decoration: BoxDecoration(
-              color: Colors.white.withOpacity(0.1),
-              borderRadius: BorderRadius.circular(12),
-            ),
-            child: const Icon(
-              Icons.home_rounded,
-              color: Colors.white,
-              size: 28,
-            ),
-          ),
-          const SizedBox(width: 16),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  widget.rental.asset?.title ?? 'Property #${widget.rental.id}',
-                  style: const TextStyle(
-                    color: Colors.white,
-                    fontWeight: FontWeight.bold,
-                    fontSize: 16,
-                  ),
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
+          Row(
+            children: [
+              Container(
+                width: 50,
+                height: 50,
+                decoration: BoxDecoration(
+                  color: Colors.white.withOpacity(0.1),
+                  borderRadius: BorderRadius.circular(12),
                 ),
-                const SizedBox(height: 4),
-                Text(
-                  'Rental ID: ${widget.rental.id.length > 8 ? widget.rental.id.substring(0, 8) : widget.rental.id}...',
+                child: const Icon(
+                  Icons.home_rounded,
+                  color: Colors.white,
+                  size: 28,
+                ),
+              ),
+              const SizedBox(width: 16),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      widget.rental.asset?.title ?? 'Property #${widget.rental.id}',
+                      style: const TextStyle(
+                        color: Colors.white,
+                        fontWeight: FontWeight.bold,
+                        fontSize: 16,
+                      ),
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                    const SizedBox(height: 4),
+                    Text(
+                      'Rental ID: ${widget.rental.id.length > 8 ? widget.rental.id.substring(0, 8) : widget.rental.id}...',
+                      style: TextStyle(
+                        color: Colors.white.withOpacity(0.6),
+                        fontSize: 12,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                decoration: BoxDecoration(
+                  color: isRentalDateArrived
+                      ? Colors.green.withOpacity(0.2)
+                      : Colors.orange.withOpacity(0.2),
+                  borderRadius: BorderRadius.circular(20),
+                ),
+                child: Text(
+                  isRentalDateArrived ? 'Active' : 'Upcoming',
                   style: TextStyle(
-                    color: Colors.white.withOpacity(0.6),
+                    color: isRentalDateArrived ? Colors.green : Colors.orange,
+                    fontWeight: FontWeight.w600,
                     fontSize: 12,
                   ),
                 ),
-              ],
-            ),
-          ),
-          Container(
-            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-            decoration: BoxDecoration(
-              color: isRentalDateArrived
-                  ? Colors.green.withOpacity(0.2)
-                  : Colors.orange.withOpacity(0.2),
-              borderRadius: BorderRadius.circular(20),
-            ),
-            child: Text(
-              isRentalDateArrived ? 'Active' : 'Upcoming',
-              style: TextStyle(
-                color: isRentalDateArrived ? Colors.green : Colors.orange,
-                fontWeight: FontWeight.w600,
-                fontSize: 12,
               ),
+            ],
+          ),
+          // Device status row
+          const SizedBox(height: 12),
+          Container(
+            padding: const EdgeInsets.all(12),
+            decoration: BoxDecoration(
+              color: Colors.white.withOpacity(0.05),
+              borderRadius: BorderRadius.circular(12),
+            ),
+            child: Row(
+              children: [
+                Icon(
+                  Icons.router,
+                  color: _isLoadingDevice 
+                      ? Colors.grey 
+                      : (_deviceId != null 
+                          ? (_deviceStatus?.online == true ? Colors.green : Colors.orange)
+                          : Colors.red),
+                  size: 20,
+                ),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: _isLoadingDevice
+                      ? Text(
+                          'Loading device...',
+                          style: TextStyle(
+                            color: Colors.white.withOpacity(0.6),
+                            fontSize: 12,
+                          ),
+                        )
+                      : _deviceId != null
+                          ? Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Text(
+                                  _deviceId!,
+                                  style: const TextStyle(
+                                    color: Colors.white,
+                                    fontSize: 12,
+                                    fontWeight: FontWeight.w500,
+                                  ),
+                                ),
+                                Text(
+                                  _deviceStatus?.online == true ? 'Online' : 'Offline',
+                                  style: TextStyle(
+                                    color: _deviceStatus?.online == true 
+                                        ? Colors.green 
+                                        : Colors.orange,
+                                    fontSize: 10,
+                                  ),
+                                ),
+                              ],
+                            )
+                          : Text(
+                              _deviceError ?? 'No device linked',
+                              style: TextStyle(
+                                color: Colors.red.withOpacity(0.8),
+                                fontSize: 12,
+                              ),
+                            ),
+                ),
+                IconButton(
+                  icon: Icon(
+                    Icons.refresh,
+                    color: Colors.white.withOpacity(0.6),
+                    size: 20,
+                  ),
+                  onPressed: _loadLinkedDevice,
+                  tooltip: 'Refresh device',
+                ),
+              ],
             ),
           ),
         ],

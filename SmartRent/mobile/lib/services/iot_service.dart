@@ -173,6 +173,25 @@ class IoTService {
       );
     }
   }
+
+  /// Get device linked to a specific asset (by token_id)
+  Future<IoTDeviceInfo?> getDeviceByAsset(int assetId) async {
+    try {
+      final response = await http.get(
+        Uri.parse('${app_config.AppConfig.baseUrl}/api/v1/iot/devices/by-asset/$assetId'),
+        headers: {'Content-Type': 'application/json'},
+      );
+
+      if (response.statusCode == 200) {
+        final data = json.decode(response.body);
+        return IoTDeviceInfo.fromJson(data);
+      }
+      return null;
+    } catch (e) {
+      print('Error fetching device by asset: $e');
+      return null;
+    }
+  }
 }
 
 /// IoT Device model (renamed to avoid conflict with models.dart)
