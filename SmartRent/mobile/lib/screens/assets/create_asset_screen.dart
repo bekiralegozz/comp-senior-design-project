@@ -473,6 +473,7 @@ class _CreateAssetScreenState extends ConsumerState<CreateAssetScreen> {
                                   return DropdownMenuItem(
                                     value: device,
                                     child: Row(
+                                      mainAxisSize: MainAxisSize.min,
                                       children: [
                                         Icon(
                                           device.isOnline ? Icons.wifi : Icons.wifi_off,
@@ -480,7 +481,12 @@ class _CreateAssetScreenState extends ConsumerState<CreateAssetScreen> {
                                           size: 16,
                                         ),
                                         const SizedBox(width: 8),
-                                        Text(device.deviceId),
+                                        Flexible(
+                                          child: Text(
+                                            device.deviceId,
+                                            overflow: TextOverflow.ellipsis,
+                                          ),
+                                        ),
                                         const SizedBox(width: 8),
                                         Container(
                                           padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),

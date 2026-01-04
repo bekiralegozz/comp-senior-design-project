@@ -56,7 +56,15 @@ class _SmartLockScreenState extends State<SmartLockScreen>
     try {
       // Get asset ID from rental
       final assetId = widget.rental.assetId;
-      if (assetId == null) {
+      print('[SmartLock] Rental ID: ${widget.rental.id}');
+      print('[SmartLock] Asset ID from rental: $assetId');
+      print('[SmartLock] Rental asset object: ${widget.rental.asset?.id}');
+      
+      // Try asset.id first, then assetId
+      final effectiveAssetId = widget.rental.asset?.id ?? assetId;
+      print('[SmartLock] Effective Asset ID: $effectiveAssetId');
+      
+      if (effectiveAssetId == null) {
         setState(() {
           _deviceError = 'No asset ID found for this rental';
           _isLoadingDevice = false;
@@ -65,16 +73,19 @@ class _SmartLockScreenState extends State<SmartLockScreen>
       }
       
       // Try to parse as int
-      final assetIdInt = int.tryParse(assetId.toString());
+      final assetIdInt = int.tryParse(effectiveAssetId.toString());
+      print('[SmartLock] Parsed Asset ID Int: $assetIdInt');
+      
       if (assetIdInt == null) {
         setState(() {
-          _deviceError = 'Invalid asset ID';
+          _deviceError = 'Invalid asset ID: $effectiveAssetId';
           _isLoadingDevice = false;
         });
         return;
       }
       
       // Fetch device from backend
+      print('[SmartLock] Fetching device for asset: $assetIdInt');
       final device = await _iotService.getDeviceByAsset(assetIdInt);
       
       if (device != null) {
@@ -425,37 +436,38 @@ class _SmartLockScreenState extends State<SmartLockScreen>
         centerTitle: true,
       ),
       body: SafeArea(
-        child: Column(
-          children: [
-            // Property info header
-            _buildPropertyHeader(),
-            
-            // Main lock area
-            Expanded(
-              child: Center(
+        child: SingleChildScrollView(
+          child: Column(
+            children: [
+              // Property info header
+              _buildPropertyHeader(),
+              
+              // Main lock area
+              Padding(
+                padding: const EdgeInsets.symmetric(vertical: 20),
                 child: Column(
                   mainAxisAlignment: MainAxisAlignment.center,
                   children: [
                     // Lock visualization
                     _buildLockVisualization(),
                     
-                    const SizedBox(height: 40),
+                    const SizedBox(height: 30),
                     
                     // Status text
                     _buildStatusText(),
                     
-                    const SizedBox(height: 40),
+                    const SizedBox(height: 30),
                     
                     // Action button
                     _buildActionButton(),
                   ],
                 ),
               ),
-            ),
-            
-            // Bottom info
-            _buildBottomInfo(),
-          ],
+              
+              // Bottom info
+              _buildBottomInfo(),
+            ],
+          ),
         ),
       ),
     );

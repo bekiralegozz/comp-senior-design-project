@@ -379,6 +379,31 @@ async def remove_device(device_id: str):
     
     return {"status": "removed", "device_id": device_id}
 
+@router.post("/unlink/{device_id}")
+async def unlink_device(device_id: str):
+    """
+    Unlink an IoT device from its asset.
+    Makes the device available for linking to a different asset.
+    """
+    if device_id not in devices:
+        raise HTTPException(status_code=404, detail=f"Device {device_id} not found")
+    
+    old_asset = devices[device_id].get("linked_asset_id")
+    
+    # Remove link info
+    devices[device_id].pop("linked_asset_id", None)
+    devices[device_id].pop("linked_by", None)
+    devices[device_id].pop("linked_at", None)
+    
+    print(f"[IoT] Device {device_id} unlinked from asset #{old_asset}")
+    
+    return {
+        "status": "unlinked",
+        "device_id": device_id,
+        "previous_asset": old_asset,
+        "message": f"Device {device_id} is now available for linking"
+    }
+
 @router.post("/link")
 async def link_device_to_asset(request: LinkDeviceRequest):
     """

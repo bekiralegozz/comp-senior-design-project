@@ -2098,7 +2098,11 @@ class _HomeScreenState extends ConsumerState<HomeScreen> with SingleTickerProvid
     // Check if this is user's listing
     final walletState = ref.watch(walletProvider);
     final userAddress = walletState.address?.toLowerCase() ?? '';
-    final isMyListing = userAddress.isNotEmpty && listing.owner.toLowerCase() == userAddress;
+    final listingOwner = listing.owner.toLowerCase();
+    final isMyListing = userAddress.isNotEmpty && listingOwner == userAddress;
+    
+    // Debug log
+    print('[RentalCard] Token: ${listing.tokenId}, Owner: $listingOwner, User: $userAddress, IsMyListing: $isMyListing');
     
     return Card(
       clipBehavior: Clip.antiAlias,
