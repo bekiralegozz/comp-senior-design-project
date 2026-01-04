@@ -385,48 +385,67 @@ class RentalHubService:
     
     def is_majority_shareholder(self, address: str, token_id: int) -> bool:
         """
-        Check if address is the majority shareholder (>50% ownership)
+        Check if address is the TOP SHAREHOLDER (has the most shares)
+        
+        This does NOT require >50% ownership!
+        The top shareholder is whoever has the highest balance.
+        
+        Example: 40-30-30 distribution -> 40% holder is the top shareholder
         
         This requires:
         1. Getting all owners from SmartRentHub
         2. Getting their balances from Building1122
         3. Finding who has the most shares
         
-        Returns: True if address owns >50% of shares
+        Returns: True if address has the highest balance among all owners
         """
         try:
             if not self.building_address or not self.smartrenthub_address:
                 logger.error("Building1122 or SmartRentHub address not set")
                 return False
             
-            # Load Building1122 ABI
-            building_abi = self._load_building_abi()
-            if not building_abi:
+            # Load SmartRentHub ABI
+            smartrenthub_abi = self._load_smartrenthub_abi()
+            if not smartrenthub_abi:
                 return False
             
+            smartrenthub_contract = self.w3.eth.contract(
+                address=Web3.to_checksum_address(self.smartrenthub_address),
+                abi=smartrenthub_abi
+            )
+            
+            # Get all owners for this asset
+            owners = smartrenthub_contract.functions.getAssetOwners(token_id).call()
+            
+            if not owners:
+                return False
+            
+            # Load Building1122 to get balances
+            building_abi = self._load_building_abi()
             building_contract = self.w3.eth.contract(
                 address=Web3.to_checksum_address(self.building_address),
                 abi=building_abi
             )
             
-            # Get total supply
-            total_supply = building_contract.functions.totalSupply(token_id).call()
-            if total_supply == 0:
-                return False
+            # Find owner with highest balance
+            max_balance = 0
+            top_owner = None
             
-            # Get user's balance
-            user_balance = building_contract.functions.balanceOf(
-                Web3.to_checksum_address(address),
-                token_id
-            ).call()
+            address_checksum = Web3.to_checksum_address(address)
             
-            # Check if >50%
-            ownership_percentage = (user_balance / total_supply) * 100
-            return ownership_percentage > 50.0
+            for owner in owners:
+                balance = building_contract.functions.balanceOf(owner, token_id).call()
+                if balance > max_balance:
+                    max_balance = balance
+                    top_owner = owner
+            
+            # Check if input address is the top owner
+            return top_owner and Web3.to_checksum_address(top_owner) == address_checksum
             
         except Exception as e:
-            logger.error(f"Error checking majority shareholder for {address}, token {token_id}: {e}")
+            logger.error(f"Error checking top shareholder for {address}, token {token_id}: {e}")
             return False
+
     
     def get_majority_shareholder(self, token_id: int) -> Optional[str]:
         """
