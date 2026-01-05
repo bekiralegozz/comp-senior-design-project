@@ -246,7 +246,8 @@ async def debug_metadata(token_id: int):
         # Railway deployment: Path from this file to abis folder
         # This file: /app/app/api/routes/rental.py
         # ABI should be: /app/app/abis/SmartRentHub.json
-        abi_path_obj = Path(__file__).resolve().parent.parent / "abis" / "SmartRentHub.json"
+        # So we need parent.parent.parent (routes -> api -> app) then abis
+        abi_path_obj = Path(__file__).resolve().parent.parent.parent / "abis" / "SmartRentHub.json"
         
         result["abi_path_tried_1"] = str(abi_path_obj)
         result["abi_exists_1"] = abi_path_obj.exists()
