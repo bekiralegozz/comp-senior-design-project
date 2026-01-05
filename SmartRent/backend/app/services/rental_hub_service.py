@@ -94,6 +94,7 @@ class RentalHubService:
             
             # Get SmartRentHub contract for metadata
             smartrenthub_abi = self._load_smartrenthub_abi()
+            logger.info(f"SmartRentHub ABI loaded: {len(smartrenthub_abi) if smartrenthub_abi else 0} entries, address: {self.smartrenthub_address}")
             if not smartrenthub_abi or not self.smartrenthub_address:
                 logger.warning("SmartRentHub not available for metadata")
                 smartrenthub_contract = None
@@ -102,6 +103,7 @@ class RentalHubService:
                     address=Web3.to_checksum_address(self.smartrenthub_address),
                     abi=smartrenthub_abi
                 )
+                logger.info(f"SmartRentHub contract initialized successfully")
             
             listings = []
             for listing in listings_raw:
