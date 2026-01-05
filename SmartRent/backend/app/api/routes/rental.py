@@ -359,6 +359,23 @@ async def debug_service_abi():
     else:
         result["abis_folder_contents"] = "folder does not exist"
     
+    # Also check RentalHub ABI and contract status
+    result["rentalhub_abi_path"] = "/app/app/abis/RentalHub.json"
+    result["rentalhub_abi_exists"] = Path("/app/app/abis/RentalHub.json").exists()
+    result["rental_hub_service_contract"] = rental_hub_service.contract is not None
+    result["rental_hub_service_abi_length"] = len(rental_hub_service.abi) if rental_hub_service.abi else 0
+    
+    # Try loading RentalHub ABI directly
+    try:
+        rentalhub_path = Path("/app/app/abis/RentalHub.json")
+        if rentalhub_path.exists():
+            import json as j2
+            with open(rentalhub_path, 'r') as f:
+                rh_data = j2.load(f)
+            result["rentalhub_manual_abi_length"] = len(rh_data.get('abi', []))
+    except Exception as e:
+        result["rentalhub_manual_error"] = str(e)
+    
     # Try loading ABI directly with full debug
     try:
         from pathlib import Path as P
