@@ -219,7 +219,9 @@ class RentalHubService:
         """Load SmartRentHub ABI"""
         try:
             # First try backend/app/abis (for Railway deployment)
-            abi_path = Path(__file__).parent.parent / "abis" / "SmartRentHub.json"
+            # rental_hub_service.py is in /app/app/services/
+            # So parent.parent = /app/app
+            abi_path = Path(__file__).resolve().parent.parent / "abis" / "SmartRentHub.json"
             logger.info(f"Trying SmartRentHub ABI path: {abi_path}, exists: {abi_path.exists()}")
             if abi_path.exists():
                 with open(abi_path, 'r') as f:
@@ -232,7 +234,7 @@ class RentalHubService:
                     return abi
             
             # Fallback to blockchain/abis (for local development)
-            abi_path = Path(__file__).parent.parent.parent.parent / "blockchain" / "abis" / "SmartRentHub.json"
+            abi_path = Path(__file__).resolve().parent.parent.parent.parent / "blockchain" / "abis" / "SmartRentHub.json"
             logger.info(f"Trying fallback SmartRentHub ABI path: {abi_path}, exists: {abi_path.exists()}")
             if abi_path.exists():
                 with open(abi_path, 'r') as f:
