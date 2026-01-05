@@ -14,6 +14,7 @@ import json
 from pathlib import Path
 import logging
 from datetime import datetime
+import requests  # For IPFS metadata fetching
 
 from app.core.config import settings
 
@@ -150,7 +151,6 @@ class RentalHubService:
                                             gateways = [http_url]
                                         
                                         # Synchronous call for metadata with retry logic
-                                        import requests
                                         metadata = None
                                         for gateway_url in gateways:
                                             try:
