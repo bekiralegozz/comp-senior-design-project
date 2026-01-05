@@ -153,7 +153,7 @@ class RentalHubService:
                                         for gateway_url in gateways:
                                             try:
                                                 logger.info(f"Fetching metadata for token {token_id} from {gateway_url}")
-                                                response = requests.get(gateway_url, timeout=10)
+                                                response = requests.get(gateway_url, timeout=30)
                                                 if response.status_code == 200:
                                                     metadata = response.json()
                                                     logger.info(f"Successfully fetched metadata for token {token_id}: name={metadata.get('name')}")

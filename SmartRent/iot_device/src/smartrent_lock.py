@@ -56,8 +56,8 @@ CONFIG = {
     'LED_PIN': 2,
     
     # Servo Angles (adjust for your servo)
-    'SERVO_LOCKED': 0,      # Locked position (degrees)
-    'SERVO_UNLOCKED': 90,   # Unlocked position (degrees)
+    'SERVO_LOCKED': 90,     # Locked position (degrees)
+    'SERVO_UNLOCKED': 0,    # Unlocked position (degrees)
 }
 
 # ============================================
