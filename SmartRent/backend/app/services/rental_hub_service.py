@@ -218,21 +218,27 @@ class RentalHubService:
         try:
             # First try backend/app/abis (for Railway deployment)
             abi_path = Path(__file__).parent.parent / "abis" / "SmartRentHub.json"
+            logger.info(f"Trying SmartRentHub ABI path: {abi_path}, exists: {abi_path.exists()}")
             if abi_path.exists():
                 with open(abi_path, 'r') as f:
                     contract_data = json.load(f)
                     if isinstance(contract_data, list):
+                        logger.info(f"Loaded SmartRentHub ABI (list format) with {len(contract_data)} entries")
                         return contract_data
-                    return contract_data.get('abi', [])
+                    abi = contract_data.get('abi', [])
+                    logger.info(f"Loaded SmartRentHub ABI with {len(abi)} entries")
+                    return abi
             
             # Fallback to blockchain/abis (for local development)
             abi_path = Path(__file__).parent.parent.parent.parent / "blockchain" / "abis" / "SmartRentHub.json"
+            logger.info(f"Trying fallback SmartRentHub ABI path: {abi_path}, exists: {abi_path.exists()}")
             if abi_path.exists():
                 with open(abi_path, 'r') as f:
                     contract_data = json.load(f)
                     if isinstance(contract_data, list):
                         return contract_data
                     return contract_data.get('abi', [])
+            logger.warning("SmartRentHub ABI not found in any location")
             return []
         except Exception as e:
             logger.error(f"Error loading SmartRentHub ABI: {e}")
