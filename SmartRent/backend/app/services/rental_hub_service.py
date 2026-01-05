@@ -716,23 +716,6 @@ class RentalHubService:
             logger.error(f"Error loading Building1122 ABI: {e}")
             return []
     
-    def _load_smartrenthub_abi(self) -> List:
-        """Load SmartRentHub ABI"""
-        try:
-            abi_path = Path(__file__).parent.parent.parent.parent / "blockchain" / "abis" / "SmartRentHub.json"
-            
-            if abi_path.exists():
-                with open(abi_path, 'r') as f:
-                    contract_data = json.load(f)
-                    if isinstance(contract_data, list):
-                        return contract_data
-                    return contract_data.get('abi', [])
-            
-            return []
-        except Exception as e:
-            logger.error(f"Error loading SmartRentHub ABI: {e}")
-            return []
-    
     def get_transaction_status(self, tx_hash: str) -> Dict:
         """
         Check if a transaction has been mined and was successful
