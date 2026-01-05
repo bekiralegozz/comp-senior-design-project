@@ -469,11 +469,11 @@ class _CreateAssetScreenState extends ConsumerState<CreateAssetScreen> {
                                   fillColor: Colors.white,
                                 ),
                                 hint: const Text('Select a device'),
+                                isExpanded: true,
                                 items: _availableDevices.map((device) {
                                   return DropdownMenuItem(
                                     value: device,
                                     child: Row(
-                                      mainAxisSize: MainAxisSize.min,
                                       children: [
                                         Icon(
                                           device.isOnline ? Icons.wifi : Icons.wifi_off,
@@ -481,7 +481,7 @@ class _CreateAssetScreenState extends ConsumerState<CreateAssetScreen> {
                                           size: 16,
                                         ),
                                         const SizedBox(width: 8),
-                                        Flexible(
+                                        Expanded(
                                           child: Text(
                                             device.deviceId,
                                             overflow: TextOverflow.ellipsis,
@@ -531,11 +531,13 @@ class _CreateAssetScreenState extends ConsumerState<CreateAssetScreen> {
                             children: [
                               Icon(Icons.check_circle, color: Colors.green[700], size: 18),
                               const SizedBox(width: 8),
-                              Text(
-                                'Device "${_selectedDevice!.deviceId}" will be linked to this property',
-                                style: TextStyle(
-                                  fontSize: 12,
-                                  color: Colors.green[900],
+                              Expanded(
+                                child: Text(
+                                  'Device "${_selectedDevice!.deviceId}" will be linked to this property',
+                                  style: TextStyle(
+                                    fontSize: 12,
+                                    color: Colors.green[900],
+                                  ),
                                 ),
                               ),
                             ],
