@@ -359,12 +359,27 @@ async def debug_service_abi():
     else:
         result["abis_folder_contents"] = "folder does not exist"
     
-    # Try loading ABI directly
+    # Try loading ABI directly with full debug
     try:
+        from pathlib import Path as P
+        import json as j
+        
+        # Exact same logic as _load_smartrenthub_abi
+        test_path = P("/app/app/services/rental_hub_service.py").resolve().parent.parent / "abis" / "SmartRentHub.json"
+        result["test_path_from_hardcoded"] = str(test_path)
+        result["test_path_exists"] = test_path.exists()
+        
+        if test_path.exists():
+            with open(test_path, 'r') as f:
+                data = j.load(f)
+            result["test_load_abi_length"] = len(data.get('abi', []))
+        
         abi = rental_hub_service._load_smartrenthub_abi()
         result["loaded_abi_length"] = len(abi) if abi else 0
     except Exception as e:
+        import traceback
         result["abi_load_error"] = str(e)
+        result["abi_load_traceback"] = traceback.format_exc()
     
     # Also try loading manually to see what's happening
     try:
