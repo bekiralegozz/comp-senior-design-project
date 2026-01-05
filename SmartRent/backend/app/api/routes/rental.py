@@ -323,6 +323,52 @@ async def debug_metadata(token_id: int):
         return {"error": str(e), "traceback": traceback.format_exc(), "token_id": token_id}
 
 
+@router.get("/debug/service-abi")
+async def debug_service_abi():
+    """Debug endpoint to check ABI loading in rental_hub_service"""
+    from pathlib import Path
+    import os
+    
+    # Check what the service sees
+    service_file = Path(__file__).resolve()
+    
+    # Simulate what rental_hub_service.py would see
+    # rental_hub_service.py is at /app/app/services/rental_hub_service.py
+    # So from there: parent.parent = /app/app
+    services_dir = service_file.parent.parent.parent / "services"
+    simulated_service_path = services_dir / "rental_hub_service.py"
+    simulated_abi_path = services_dir.parent / "abis" / "SmartRentHub.json"
+    
+    # Also check actual service attributes
+    result = {
+        "this_file": str(service_file),
+        "services_dir": str(services_dir),
+        "services_dir_exists": services_dir.exists(),
+        "simulated_service_path": str(simulated_service_path),
+        "simulated_service_exists": simulated_service_path.exists(),
+        "simulated_abi_path": str(simulated_abi_path),
+        "simulated_abi_exists": simulated_abi_path.exists(),
+        "rental_hub_service_smartrenthub_address": rental_hub_service.smartrenthub_address,
+        "rental_hub_service_contract_address": rental_hub_service.contract_address,
+    }
+    
+    # Try to list the abis folder
+    abis_folder = services_dir.parent / "abis"
+    if abis_folder.exists():
+        result["abis_folder_contents"] = os.listdir(str(abis_folder))
+    else:
+        result["abis_folder_contents"] = "folder does not exist"
+    
+    # Try loading ABI directly
+    try:
+        abi = rental_hub_service._load_smartrenthub_abi()
+        result["loaded_abi_length"] = len(abi) if abi else 0
+    except Exception as e:
+        result["abi_load_error"] = str(e)
+    
+    return result
+
+
 @router.get("/listings", response_model=List[RentalListingResponse])
 async def get_all_rental_listings():
     """
