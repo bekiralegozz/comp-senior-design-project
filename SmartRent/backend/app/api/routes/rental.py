@@ -223,6 +223,91 @@ async def prepare_cancel_rental_listing(listing_id: int):
         )
 
 
+@router.get("/debug/metadata/{token_id}")
+async def debug_metadata(token_id: int):
+    """Debug endpoint to test IPFS metadata fetching"""
+    try:
+        import requests as req
+        from web3 import Web3
+        import json
+        import os
+        
+        result = {
+            "token_id": token_id,
+            "metadata_uri": None,
+            "gateway_results": [],
+            "final_metadata": None,
+            "error": None
+        }
+        
+        # Load SmartRentHub ABI and contract
+        abi_path = os.path.join(os.path.dirname(__file__), '..', '..', '..', '..', 'blockchain', 'artifacts', 'contracts', 'SmartRentHub.sol', 'SmartRentHub.json')
+        
+        # Try alternate path
+        if not os.path.exists(abi_path):
+            abi_path = '/app/blockchain/artifacts/contracts/SmartRentHub.sol/SmartRentHub.json'
+        
+        result["abi_path"] = abi_path
+        result["abi_exists"] = os.path.exists(abi_path)
+        
+        # Check environment
+        from app.core.config import settings
+        result["smartrenthub_address"] = getattr(settings, 'SMARTRENTHUB_CONTRACT_ADDRESS', None)
+        result["web3_provider"] = getattr(settings, 'WEB3_PROVIDER_URL', None)
+        
+        if result["abi_exists"] and result["smartrenthub_address"] and result["web3_provider"]:
+            with open(abi_path, 'r') as f:
+                abi_json = json.load(f)
+                abi = abi_json.get('abi', [])
+            
+            w3 = Web3(Web3.HTTPProvider(result["web3_provider"]))
+            contract = w3.eth.contract(
+                address=Web3.to_checksum_address(result["smartrenthub_address"]),
+                abi=abi
+            )
+            
+            try:
+                asset_info = contract.functions.getAsset(token_id).call()
+                result["asset_info_raw"] = str(asset_info)
+                
+                if asset_info and len(asset_info) >= 2:
+                    metadata_uri = asset_info[1]
+                    result["metadata_uri"] = metadata_uri
+                    
+                    if metadata_uri and metadata_uri.startswith("ipfs://"):
+                        ipfs_hash = metadata_uri.replace("ipfs://", "")
+                        gateways = [
+                            f"https://gateway.pinata.cloud/ipfs/{ipfs_hash}",
+                            f"https://cloudflare-ipfs.com/ipfs/{ipfs_hash}",
+                            f"https://ipfs.io/ipfs/{ipfs_hash}"
+                        ]
+                        
+                        for gw in gateways:
+                            try:
+                                resp = req.get(gw, timeout=15)
+                                result["gateway_results"].append({
+                                    "gateway": gw,
+                                    "status": resp.status_code,
+                                    "success": resp.status_code == 200,
+                                    "content_preview": resp.text[:300] if resp.status_code == 200 else resp.text[:100]
+                                })
+                                if resp.status_code == 200:
+                                    result["final_metadata"] = resp.json()
+                                    break
+                            except Exception as gw_err:
+                                result["gateway_results"].append({
+                                    "gateway": gw,
+                                    "error": str(gw_err)
+                                })
+            except Exception as contract_err:
+                result["error"] = f"Contract call error: {str(contract_err)}"
+        
+        return result
+    except Exception as e:
+        import traceback
+        return {"error": str(e), "traceback": traceback.format_exc(), "token_id": token_id}
+
+
 @router.get("/listings", response_model=List[RentalListingResponse])
 async def get_all_rental_listings():
     """
