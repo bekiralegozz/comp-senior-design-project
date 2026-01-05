@@ -51,23 +51,25 @@ class RentalHubService:
     def _load_abi(self) -> List:
         """Load RentalHub ABI from abis folder"""
         try:
-            # First try backend/app/abis (for Railway deployment)
-            abi_path = Path(__file__).parent.parent / "abis" / "RentalHub.json"
-            if abi_path.exists():
-                with open(abi_path, 'r') as f:
-                    contract_data = json.load(f)
-                    if isinstance(contract_data, list):
-                        return contract_data
-                    return contract_data.get('abi', [])
+            # Try multiple paths - Railway has different structure
+            possible_paths = [
+                # Railway deployment path (hardcoded)
+                Path("/app/app/abis/RentalHub.json"),
+                # Dynamic path based on this file location
+                Path(__file__).resolve().parent.parent / "abis" / "RentalHub.json",
+                # Local development paths
+                Path(__file__).resolve().parent.parent.parent.parent / "blockchain" / "artifacts" / "contracts" / "RentalHub.sol" / "RentalHub.json",
+            ]
             
-            # Fallback to blockchain/abis (for local development)
-            abi_path = Path(__file__).parent.parent.parent.parent / "blockchain" / "abis" / "RentalHub.json"
-            if abi_path.exists():
-                with open(abi_path, 'r') as f:
-                    contract_data = json.load(f)
-                    if isinstance(contract_data, list):
-                        return contract_data
-                    return contract_data.get('abi', [])
+            for abi_path in possible_paths:
+                if abi_path.exists():
+                    with open(abi_path, 'r') as f:
+                        contract_data = json.load(f)
+                        if isinstance(contract_data, list):
+                            return contract_data
+                        abi = contract_data.get('abi', [])
+                        if abi:
+                            return abi
             
             logger.warning("RentalHub ABI not found")
             return []
