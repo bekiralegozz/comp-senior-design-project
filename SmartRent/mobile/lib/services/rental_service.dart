@@ -21,7 +21,12 @@ class RentalService {
 
       if (response.statusCode == 200) {
         final List<dynamic> data = json.decode(response.body);
-        return data.map((json) => RentalListing.fromJson(json)).toList();
+        print('[RentalService] Raw API response: $data');
+        final listings = data.map((json) => RentalListing.fromJson(json)).toList();
+        for (var listing in listings) {
+          print('[RentalService] Listing ${listing.listingId}: name=${listing.propertyName}, image=${listing.imageUrl}');
+        }
+        return listings;
       } else {
         print('Failed to load rental listings: ${response.statusCode}');
         return [];

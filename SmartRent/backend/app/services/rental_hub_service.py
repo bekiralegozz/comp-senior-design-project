@@ -133,23 +133,43 @@ class RentalHubService:
                                 # Fetch full metadata for name, image, and attributes
                                 if metadata_uri:
                                     try:
-                                        # Convert IPFS to HTTP if needed
+                                        # Convert IPFS to HTTP if needed - use more reliable gateways
                                         if metadata_uri.startswith("ipfs://"):
-                                            http_url = metadata_uri.replace("ipfs://", "https://ipfs.io/ipfs/")
+                                            ipfs_hash = metadata_uri.replace("ipfs://", "")
+                                            # Try multiple gateways in order
+                                            gateways = [
+                                                f"https://gateway.pinata.cloud/ipfs/{ipfs_hash}",
+                                                f"https://cloudflare-ipfs.com/ipfs/{ipfs_hash}",
+                                                f"https://ipfs.io/ipfs/{ipfs_hash}"
+                                            ]
+                                            http_url = gateways[0]  # Start with Pinata
                                         else:
                                             http_url = metadata_uri
+                                            gateways = [http_url]
                                         
-                                        # Synchronous call for metadata
+                                        # Synchronous call for metadata with retry logic
                                         import requests
-                                        response = requests.get(http_url, timeout=5)
-                                        if response.status_code == 200:
-                                            metadata = response.json()
+                                        metadata = None
+                                        for gateway_url in gateways:
+                                            try:
+                                                logger.info(f"Fetching metadata for token {token_id} from {gateway_url}")
+                                                response = requests.get(gateway_url, timeout=10)
+                                                if response.status_code == 200:
+                                                    metadata = response.json()
+                                                    logger.info(f"Successfully fetched metadata for token {token_id}: name={metadata.get('name')}")
+                                                    break
+                                            except Exception as gateway_err:
+                                                logger.warning(f"Gateway {gateway_url} failed: {gateway_err}")
+                                                continue
+                                        
+                                        if metadata:
                                             listing_dict['property_name'] = metadata.get('name', f'Property #{token_id}')
                                             
-                                            # Convert IPFS image URL to HTTP
+                                            # Convert IPFS image URL to HTTP - use reliable gateway
                                             image_url = metadata.get('image', '')
                                             if image_url and image_url.startswith('ipfs://'):
-                                                image_url = image_url.replace('ipfs://', 'https://ipfs.io/ipfs/')
+                                                ipfs_image_hash = image_url.replace('ipfs://', '')
+                                                image_url = f'https://gateway.pinata.cloud/ipfs/{ipfs_image_hash}'
                                             listing_dict['image_url'] = image_url
                                             
                                             # Parse attributes - can be array or dict
@@ -166,7 +186,7 @@ class RentalHubService:
                                             else:
                                                 listing_dict['attributes'] = attributes_raw
                                         else:
-                                            logger.warning(f"Metadata fetch failed for token {token_id}: status {response.status_code}")
+                                            logger.warning(f"All gateways failed for token {token_id}")
                                             listing_dict['property_name'] = f'Property #{token_id}'
                                             listing_dict['image_url'] = ''
                                             listing_dict['attributes'] = {}

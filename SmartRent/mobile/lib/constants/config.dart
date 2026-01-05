@@ -33,7 +33,7 @@ class AppConfig {
   // App Configuration
   static const String appName = 'SmartRent';
   static const String appVersion = '1.0.0';
-  static const Duration apiTimeout = Duration(seconds: 30);
+  static const Duration apiTimeout = Duration(seconds: 60);
   
   // Pagination
   static const int defaultPageSize = 20;
