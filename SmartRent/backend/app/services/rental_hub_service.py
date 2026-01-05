@@ -218,34 +218,26 @@ class RentalHubService:
     def _load_smartrenthub_abi(self) -> List:
         """Load SmartRentHub ABI"""
         try:
-            # First try backend/app/abis (for Railway deployment)
-            # rental_hub_service.py is in /app/app/services/
-            # So parent.parent = /app/app
-            abi_path = Path(__file__).resolve().parent.parent / "abis" / "SmartRentHub.json"
-            print(f"[DEBUG] SmartRentHub ABI path: {abi_path}, exists: {abi_path.exists()}")
+            # Try multiple paths - Railway has different structure
+            possible_paths = [
+                # Railway deployment path
+                Path("/app/app/abis/SmartRentHub.json"),
+                # Dynamic path based on this file location
+                Path(__file__).resolve().parent.parent / "abis" / "SmartRentHub.json",
+                # Local development paths
+                Path(__file__).resolve().parent.parent.parent.parent / "blockchain" / "artifacts" / "contracts" / "SmartRentHub.sol" / "SmartRentHub.json",
+            ]
             
-            if abi_path.exists():
-                with open(abi_path, 'r') as f:
-                    contract_data = json.load(f)
-                    if isinstance(contract_data, list):
-                        print(f"[DEBUG] Loaded SmartRentHub ABI (list) with {len(contract_data)} entries")
-                        return contract_data
-                    abi = contract_data.get('abi', [])
-                    print(f"[DEBUG] Loaded SmartRentHub ABI with {len(abi)} entries")
-                    return abi
+            for abi_path in possible_paths:
+                if abi_path.exists():
+                    with open(abi_path, 'r') as f:
+                        contract_data = json.load(f)
+                        if isinstance(contract_data, list):
+                            return contract_data
+                        abi = contract_data.get('abi', [])
+                        if abi:
+                            return abi
             
-            # Fallback to blockchain/artifacts (for local development)
-            abi_path2 = Path(__file__).resolve().parent.parent.parent.parent / "blockchain" / "artifacts" / "contracts" / "SmartRentHub.sol" / "SmartRentHub.json"
-            print(f"[DEBUG] Fallback ABI path: {abi_path2}, exists: {abi_path2.exists()}")
-            
-            if abi_path2.exists():
-                with open(abi_path2, 'r') as f:
-                    contract_data = json.load(f)
-                    if isinstance(contract_data, list):
-                        return contract_data
-                    return contract_data.get('abi', [])
-            
-            print(f"[DEBUG] SmartRentHub ABI not found in any location!")
             return []
         except Exception as e:
             print(f"[DEBUG] Error loading SmartRentHub ABI: {e}")
