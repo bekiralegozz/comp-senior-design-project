@@ -222,30 +222,33 @@ class RentalHubService:
             # rental_hub_service.py is in /app/app/services/
             # So parent.parent = /app/app
             abi_path = Path(__file__).resolve().parent.parent / "abis" / "SmartRentHub.json"
-            logger.info(f"Trying SmartRentHub ABI path: {abi_path}, exists: {abi_path.exists()}")
+            print(f"[DEBUG] SmartRentHub ABI path: {abi_path}, exists: {abi_path.exists()}")
+            
             if abi_path.exists():
                 with open(abi_path, 'r') as f:
                     contract_data = json.load(f)
                     if isinstance(contract_data, list):
-                        logger.info(f"Loaded SmartRentHub ABI (list format) with {len(contract_data)} entries")
+                        print(f"[DEBUG] Loaded SmartRentHub ABI (list) with {len(contract_data)} entries")
                         return contract_data
                     abi = contract_data.get('abi', [])
-                    logger.info(f"Loaded SmartRentHub ABI with {len(abi)} entries")
+                    print(f"[DEBUG] Loaded SmartRentHub ABI with {len(abi)} entries")
                     return abi
             
-            # Fallback to blockchain/abis (for local development)
-            abi_path = Path(__file__).resolve().parent.parent.parent.parent / "blockchain" / "abis" / "SmartRentHub.json"
-            logger.info(f"Trying fallback SmartRentHub ABI path: {abi_path}, exists: {abi_path.exists()}")
-            if abi_path.exists():
-                with open(abi_path, 'r') as f:
+            # Fallback to blockchain/artifacts (for local development)
+            abi_path2 = Path(__file__).resolve().parent.parent.parent.parent / "blockchain" / "artifacts" / "contracts" / "SmartRentHub.sol" / "SmartRentHub.json"
+            print(f"[DEBUG] Fallback ABI path: {abi_path2}, exists: {abi_path2.exists()}")
+            
+            if abi_path2.exists():
+                with open(abi_path2, 'r') as f:
                     contract_data = json.load(f)
                     if isinstance(contract_data, list):
                         return contract_data
                     return contract_data.get('abi', [])
-            logger.warning("SmartRentHub ABI not found in any location")
+            
+            print(f"[DEBUG] SmartRentHub ABI not found in any location!")
             return []
         except Exception as e:
-            logger.error(f"Error loading SmartRentHub ABI: {e}")
+            print(f"[DEBUG] Error loading SmartRentHub ABI: {e}")
             return []
     
     def get_rental_listing(self, listing_id: int) -> Optional[Dict]:
