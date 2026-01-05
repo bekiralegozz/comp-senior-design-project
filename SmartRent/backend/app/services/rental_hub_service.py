@@ -47,6 +47,18 @@ class RentalHubService:
         else:
             self.contract = None
             logger.warning("RENTAL_HUB_CONTRACT_ADDRESS not set")
+        
+        # Pre-load SmartRentHub contract for metadata fetching
+        self.smartrenthub_abi = self._load_smartrenthub_abi()
+        if self.smartrenthub_abi and self.smartrenthub_address:
+            self.smartrenthub_contract = self.w3.eth.contract(
+                address=Web3.to_checksum_address(self.smartrenthub_address),
+                abi=self.smartrenthub_abi
+            )
+            logger.info(f"SmartRentHub contract initialized with {len(self.smartrenthub_abi)} ABI entries")
+        else:
+            self.smartrenthub_contract = None
+            logger.warning(f"SmartRentHub not initialized: ABI={len(self.smartrenthub_abi) if self.smartrenthub_abi else 0}, address={self.smartrenthub_address}")
     
     def _load_abi(self) -> List:
         """Load RentalHub ABI from abis folder"""
@@ -95,18 +107,12 @@ class RentalHubService:
             if not listings_raw or not hasattr(listings_raw, '__iter__'):
                 return []
             
-            # Get SmartRentHub contract for metadata
-            smartrenthub_abi = self._load_smartrenthub_abi()
-            logger.info(f"SmartRentHub ABI loaded: {len(smartrenthub_abi) if smartrenthub_abi else 0} entries, address: {self.smartrenthub_address}")
-            if not smartrenthub_abi or not self.smartrenthub_address:
-                logger.warning("SmartRentHub not available for metadata")
-                smartrenthub_contract = None
+            # Use pre-loaded SmartRentHub contract for metadata
+            smartrenthub_contract = self.smartrenthub_contract
+            if smartrenthub_contract:
+                logger.info(f"Using pre-loaded SmartRentHub contract: {self.smartrenthub_address}")
             else:
-                smartrenthub_contract = self.w3.eth.contract(
-                    address=Web3.to_checksum_address(self.smartrenthub_address),
-                    abi=smartrenthub_abi
-                )
-                logger.info(f"SmartRentHub contract initialized successfully")
+                logger.warning(f"SmartRentHub contract not available (abi={len(self.smartrenthub_abi) if self.smartrenthub_abi else 0}, addr={self.smartrenthub_address})")
             
             listings = []
             for listing in listings_raw:
