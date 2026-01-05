@@ -366,6 +366,20 @@ async def debug_service_abi():
     except Exception as e:
         result["abi_load_error"] = str(e)
     
+    # Also try loading manually to see what's happening
+    try:
+        manual_path = services_dir.parent / "abis" / "SmartRentHub.json"
+        if manual_path.exists():
+            import json
+            with open(manual_path, 'r') as f:
+                data = json.load(f)
+            result["manual_load_type"] = type(data).__name__
+            result["manual_load_keys"] = list(data.keys()) if isinstance(data, dict) else "not a dict"
+            if isinstance(data, dict) and 'abi' in data:
+                result["manual_abi_length"] = len(data['abi'])
+    except Exception as e:
+        result["manual_load_error"] = str(e)
+    
     return result
 
 
