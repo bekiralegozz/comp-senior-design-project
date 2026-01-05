@@ -243,19 +243,26 @@ async def debug_metadata(token_id: int):
         # Load SmartRentHub ABI and contract - try backend/app/abis first
         from pathlib import Path
         
-        # Railway deployment: /app/app/abis/SmartRentHub.json
-        abi_path = Path(__file__).parent.parent / "abis" / "SmartRentHub.json"
+        # Railway deployment: Path from this file to abis folder
+        # This file: /app/app/api/routes/rental.py
+        # ABI should be: /app/app/abis/SmartRentHub.json
+        abi_path_obj = Path(__file__).resolve().parent.parent / "abis" / "SmartRentHub.json"
         
-        # Fallback: relative to this file
-        if not abi_path.exists():
-            abi_path = os.path.join(os.path.dirname(__file__), '..', 'abis', 'SmartRentHub.json')
+        result["abi_path_tried_1"] = str(abi_path_obj)
+        result["abi_exists_1"] = abi_path_obj.exists()
         
-        # Another fallback for local dev
-        if not os.path.exists(str(abi_path)):
-            abi_path = os.path.join(os.path.dirname(__file__), '..', '..', '..', '..', 'blockchain', 'artifacts', 'contracts', 'SmartRentHub.sol', 'SmartRentHub.json')
+        abi_path = str(abi_path_obj)
         
-        result["abi_path"] = str(abi_path)
-        result["abi_exists"] = os.path.exists(str(abi_path))
+        # Fallback for local dev with blockchain folder
+        if not abi_path_obj.exists():
+            fallback_path = Path(__file__).resolve().parent.parent.parent.parent.parent / "blockchain" / "artifacts" / "contracts" / "SmartRentHub.sol" / "SmartRentHub.json"
+            result["abi_path_tried_2"] = str(fallback_path)
+            result["abi_exists_2"] = fallback_path.exists()
+            if fallback_path.exists():
+                abi_path = str(fallback_path)
+        
+        result["abi_path"] = abi_path
+        result["abi_exists"] = os.path.exists(abi_path)
         
         # Check environment
         from app.core.config import settings
