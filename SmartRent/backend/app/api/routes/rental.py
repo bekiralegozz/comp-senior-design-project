@@ -412,6 +412,20 @@ async def debug_service_abi():
     except Exception as e:
         result["manual_load_error"] = str(e)
     
+    # Try calling blockchain directly
+    try:
+        if rental_hub_service.contract:
+            listings_raw = rental_hub_service.contract.functions.getActiveRentalListings().call()
+            result["blockchain_listings_count"] = len(listings_raw) if listings_raw else 0
+            if listings_raw and len(listings_raw) > 0:
+                result["first_listing_raw"] = str(listings_raw[0])
+        else:
+            result["blockchain_error"] = "contract is None"
+    except Exception as e:
+        import traceback
+        result["blockchain_error"] = str(e)
+        result["blockchain_traceback"] = traceback.format_exc()
+    
     return result
 
 
