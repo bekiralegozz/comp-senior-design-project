@@ -240,15 +240,22 @@ async def debug_metadata(token_id: int):
             "error": None
         }
         
-        # Load SmartRentHub ABI and contract
-        abi_path = os.path.join(os.path.dirname(__file__), '..', '..', '..', '..', 'blockchain', 'artifacts', 'contracts', 'SmartRentHub.sol', 'SmartRentHub.json')
+        # Load SmartRentHub ABI and contract - try backend/app/abis first
+        from pathlib import Path
         
-        # Try alternate path
-        if not os.path.exists(abi_path):
-            abi_path = '/app/blockchain/artifacts/contracts/SmartRentHub.sol/SmartRentHub.json'
+        # Railway deployment: /app/app/abis/SmartRentHub.json
+        abi_path = Path(__file__).parent.parent / "abis" / "SmartRentHub.json"
         
-        result["abi_path"] = abi_path
-        result["abi_exists"] = os.path.exists(abi_path)
+        # Fallback: relative to this file
+        if not abi_path.exists():
+            abi_path = os.path.join(os.path.dirname(__file__), '..', 'abis', 'SmartRentHub.json')
+        
+        # Another fallback for local dev
+        if not os.path.exists(str(abi_path)):
+            abi_path = os.path.join(os.path.dirname(__file__), '..', '..', '..', '..', 'blockchain', 'artifacts', 'contracts', 'SmartRentHub.sol', 'SmartRentHub.json')
+        
+        result["abi_path"] = str(abi_path)
+        result["abi_exists"] = os.path.exists(str(abi_path))
         
         # Check environment
         from app.core.config import settings
