@@ -3,6 +3,7 @@ import '../../services/models.dart';
 import '../../services/nft_service.dart';
 import '../../services/nft_models.dart';
 import '../../services/api_service.dart';
+import '../../services/rental_service.dart';
 import 'auth_provider.dart';
 
 /// ==========================================================
@@ -74,9 +75,9 @@ class AssetListNotifier extends StateNotifier<AssetListState> {
         ownerAddress: ownerAddress,
         limit: 20,
       );
-      
+
       final nftAssetsData = response['assets'] as List<dynamic>;
-      
+
       // Convert to Asset model
       final assets = nftAssetsData.map((data) {
         final nftData = data as Map<String, dynamic>;
@@ -141,7 +142,8 @@ class AssetDetailNotifier extends StateNotifier<AssetDetailState> {
   final NftService _nftService;
   final int tokenId;
 
-  AssetDetailNotifier(this._nftService, this.tokenId) : super(const AssetDetailState()) {
+  AssetDetailNotifier(this._nftService, this.tokenId)
+      : super(const AssetDetailState()) {
     loadAsset();
   }
 
@@ -150,7 +152,7 @@ class AssetDetailNotifier extends StateNotifier<AssetDetailState> {
 
     try {
       final nftAsset = await _nftService.getAssetDetails(tokenId);
-      
+
       if (nftAsset != null) {
         final asset = Asset(
           id: nftAsset.tokenId.toString(),
@@ -185,7 +187,8 @@ final nftServiceProvider = Provider<NftService>((ref) {
   return NftService();
 });
 
-final assetListProvider = StateNotifierProvider.family<AssetListNotifier, AssetListState, String?>(
+final assetListProvider =
+    StateNotifierProvider.family<AssetListNotifier, AssetListState, String?>(
   (ref, category) {
     final nftService = ref.watch(nftServiceProvider);
     final apiService = ApiService();
@@ -199,7 +202,8 @@ final assetListProvider = StateNotifierProvider.family<AssetListNotifier, AssetL
   },
 );
 
-final assetDetailProvider = StateNotifierProvider.family<AssetDetailNotifier, AssetDetailState, int>(
+final assetDetailProvider =
+    StateNotifierProvider.family<AssetDetailNotifier, AssetDetailState, int>(
   (ref, tokenId) {
     final nftService = ref.watch(nftServiceProvider);
     return AssetDetailNotifier(nftService, tokenId);
@@ -207,7 +211,8 @@ final assetDetailProvider = StateNotifierProvider.family<AssetDetailNotifier, As
 );
 
 // My Assets Provider - Assets owned by connected wallet
-final myAssetsProvider = StateNotifierProvider<AssetListNotifier, AssetListState>((ref) {
+final myAssetsProvider =
+    StateNotifierProvider<AssetListNotifier, AssetListState>((ref) {
   final nftService = ref.watch(nftServiceProvider);
   final apiService = ApiService();
   final walletAddress = ref.watch(walletAddressProvider);
@@ -220,20 +225,31 @@ final myAssetsProvider = StateNotifierProvider<AssetListNotifier, AssetListState
 });
 
 // All Assets Provider - Shows ALL minted NFTs in the collection (no owner filter)
-final allAssetsProvider = StateNotifierProvider<AssetListNotifier, AssetListState>((ref) {
+final allAssetsProvider =
+    StateNotifierProvider<AssetListNotifier, AssetListState>((ref) {
   final nftService = ref.watch(nftServiceProvider);
   final apiService = ApiService();
   return AssetListNotifier(
     nftService,
     apiService,
-    ownerAddress: null,  // No filter - show all assets in collection
+    ownerAddress: null, // No filter - show all assets in collection
     availableOnly: false,
   );
 });
 
 // Asset Categories Provider - Static list for now
 final assetCategoriesProvider = Provider<List<String>>((ref) {
-  return ['housing', 'vehicles', 'electronics', 'tools', 'furniture', 'sports', 'books', 'clothing', 'other'];
+  return [
+    'housing',
+    'vehicles',
+    'electronics',
+    'tools',
+    'furniture',
+    'sports',
+    'books',
+    'clothing',
+    'other'
+  ];
 });
 
 // ============================================
@@ -273,14 +289,20 @@ class MarketplaceListing {
       listingId: int.tryParse(json['listing_id']?.toString() ?? '0') ?? 0,
       tokenId: int.tryParse(json['token_id']?.toString() ?? '0') ?? 0,
       seller: (json['seller'] ?? '').toString(),
-      sharesForSale: int.tryParse(json['shares_for_sale']?.toString() ?? '0') ?? 0,
-      sharesRemaining: int.tryParse(json['shares_remaining']?.toString() ?? '0') ?? 0,
-      pricePerSharePol: double.tryParse(json['price_per_share_pol']?.toString() ?? '0') ?? 0.0,
+      sharesForSale:
+          int.tryParse(json['shares_for_sale']?.toString() ?? '0') ?? 0,
+      sharesRemaining:
+          int.tryParse(json['shares_remaining']?.toString() ?? '0') ?? 0,
+      pricePerSharePol:
+          double.tryParse(json['price_per_share_pol']?.toString() ?? '0') ??
+              0.0,
       isActive: json['is_active'] == true || json['is_active'] == 'true',
       createdAt: int.tryParse(json['created_at']?.toString() ?? '0') ?? 0,
-      assetName: (json['asset_name'] ?? 'Asset #${json['token_id']}').toString(),
+      assetName:
+          (json['asset_name'] ?? 'Asset #${json['token_id']}').toString(),
       assetImage: (json['asset_image'] ?? '').toString(),
-      totalShares: int.tryParse(json['total_shares']?.toString() ?? '1000') ?? 1000,
+      totalShares:
+          int.tryParse(json['total_shares']?.toString() ?? '1000') ?? 1000,
     );
   }
 
@@ -331,7 +353,8 @@ class ListingsNotifier extends StateNotifier<ListingsState> {
       final listingsData = response['listings'] as List<dynamic>;
 
       final listings = listingsData
-          .map((data) => MarketplaceListing.fromJson(data as Map<String, dynamic>))
+          .map((data) =>
+              MarketplaceListing.fromJson(data as Map<String, dynamic>))
           .where((listing) => listing.isActive)
           .toList();
 
@@ -351,26 +374,141 @@ class ListingsNotifier extends StateNotifier<ListingsState> {
 }
 
 /// Listings Provider - Active marketplace listings from SmartRentHub
-final listingsProvider = StateNotifierProvider<ListingsNotifier, ListingsState>((ref) {
+final listingsProvider =
+    StateNotifierProvider<ListingsNotifier, ListingsState>((ref) {
   final apiService = ApiService();
   return ListingsNotifier(apiService);
 });
 
 /// My Listings Provider - Listings by connected wallet
-final myListingsProvider = FutureProvider<List<MarketplaceListing>>((ref) async {
+final myListingsProvider =
+    FutureProvider<List<MarketplaceListing>>((ref) async {
   final walletAddress = ref.watch(walletAddressProvider);
   if (walletAddress == null) return [];
 
   final apiService = ApiService();
   await apiService.initialize();
-  
+
   try {
     final response = await apiService.getMyListings(walletAddress);
     final listingsData = response['listings'] as List<dynamic>;
     return listingsData
-        .map((data) => MarketplaceListing.fromJson(data as Map<String, dynamic>))
+        .map(
+            (data) => MarketplaceListing.fromJson(data as Map<String, dynamic>))
         .toList();
   } catch (e) {
     return [];
   }
+});
+
+// ============================================
+// NFT PORTFOLIO HOLDINGS
+// ============================================
+
+/// NFT Holdings State - for displaying user's NFT portfolio
+class NftHoldingsState {
+  final List<UserNftHolding> holdings;
+  final Set<int> tokensWithRentalListings;
+  final bool isLoading;
+  final String? error;
+
+  const NftHoldingsState({
+    this.holdings = const [],
+    this.tokensWithRentalListings = const {},
+    this.isLoading = false,
+    this.error,
+  });
+
+  NftHoldingsState copyWith({
+    List<UserNftHolding>? holdings,
+    Set<int>? tokensWithRentalListings,
+    bool? isLoading,
+    String? error,
+  }) {
+    return NftHoldingsState(
+      holdings: holdings ?? this.holdings,
+      tokensWithRentalListings:
+          tokensWithRentalListings ?? this.tokensWithRentalListings,
+      isLoading: isLoading ?? this.isLoading,
+      error: error,
+    );
+  }
+}
+
+/// NFT Holdings Notifier - Fetches user's NFT holdings from API
+class NftHoldingsNotifier extends StateNotifier<NftHoldingsState> {
+  final NftService _nftService;
+  final String? walletAddress;
+
+  NftHoldingsNotifier(this._nftService, this.walletAddress)
+      : super(const NftHoldingsState()) {
+    if (walletAddress != null && walletAddress!.isNotEmpty) {
+      loadHoldings();
+    }
+  }
+
+  Future<void> loadHoldings() async {
+    if (walletAddress == null || walletAddress!.isEmpty) {
+      state = state.copyWith(
+        error: 'Wallet not connected',
+        isLoading: false,
+      );
+      return;
+    }
+
+    if (state.isLoading) return;
+
+    state = state.copyWith(isLoading: true, error: null);
+
+    try {
+      // Load holdings and rental listings in parallel for better performance
+      final holdingsFuture = _nftService.getUserHoldings(walletAddress!);
+      final rentalListingsFuture = _loadRentalListings();
+
+      final results = await Future.wait([holdingsFuture, rentalListingsFuture]);
+
+      final holdings = results[0] as List<UserNftHolding>;
+      final tokensWithListings = results[1] as Set<int>;
+
+      state = state.copyWith(
+        holdings: holdings,
+        tokensWithRentalListings: tokensWithListings,
+        isLoading: false,
+      );
+    } catch (e) {
+      state = state.copyWith(
+        isLoading: false,
+        error: 'Failed to load NFT holdings: $e',
+      );
+    }
+  }
+
+  Future<Set<int>> _loadRentalListings() async {
+    try {
+      final rentalService = RentalService();
+      final allListings = await rentalService.getAllRentalListings();
+      final tokensWithListings = <int>{};
+
+      for (final listing in allListings) {
+        if (listing.isActive &&
+            listing.owner.toLowerCase() == walletAddress!.toLowerCase()) {
+          tokensWithListings.add(listing.tokenId);
+        }
+      }
+
+      return tokensWithListings;
+    } catch (e) {
+      print('Error checking rental listings: $e');
+      return {};
+    }
+  }
+
+  Future<void> refresh() => loadHoldings();
+}
+
+/// NFT Holdings Provider - User's NFT portfolio with rental listing status
+final nftHoldingsProvider = StateNotifierProvider.family<NftHoldingsNotifier,
+    NftHoldingsState, String?>((ref, walletAddress) {
+  final nftService = ref.watch(nftServiceProvider);
+  return NftHoldingsNotifier(nftService, walletAddress);
 });

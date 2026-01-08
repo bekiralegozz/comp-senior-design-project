@@ -25,64 +25,15 @@ class NftPortfolioScreen extends ConsumerStatefulWidget {
 }
 
 class _NftPortfolioScreenState extends ConsumerState<NftPortfolioScreen> {
+  // Services needed for operations (not for data loading - that's done by provider)
   final NftService _nftService = NftService();
   final RentalService _rentalService = RentalService();
-  List<UserNftHolding> _holdings = [];
-  bool _isLoading = true;
-  String? _error;
-  Set<int> _tokensWithRentalListings = {}; // Track which tokens have active rental listings
-
-  @override
-  void initState() {
-    super.initState();
-    _loadHoldings();
-  }
-
-  Future<void> _loadHoldings() async {
-    if (widget.walletAddress == null) {
-      setState(() {
-        _error = 'Wallet not connected';
-        _isLoading = false;
-      });
-      return;
-    }
-
-    setState(() {
-      _isLoading = true;
-      _error = null;
-    });
-
-    try {
-      final holdings = await _nftService.getUserHoldings(widget.walletAddress!);
-      
-      // Check which tokens have active rental listings
-      final tokensWithListings = <int>{};
-      try {
-        final allListings = await _rentalService.getAllRentalListings();
-        for (final listing in allListings) {
-          if (listing.isActive && listing.owner.toLowerCase() == widget.walletAddress!.toLowerCase()) {
-            tokensWithListings.add(listing.tokenId);
-          }
-        }
-      } catch (e) {
-        print('Error checking rental listings: $e');
-      }
-      
-      setState(() {
-        _holdings = holdings;
-        _tokensWithRentalListings = tokensWithListings;
-        _isLoading = false;
-      });
-    } catch (e) {
-      setState(() {
-        _error = e.toString();
-        _isLoading = false;
-      });
-    }
-  }
 
   @override
   Widget build(BuildContext context) {
+    // Use the Riverpod provider for NFT holdings (async & cached like marketplace)
+    final holdingsState = ref.watch(nftHoldingsProvider(widget.walletAddress));
+
     return Scaffold(
       appBar: AppBar(
         leading: IconButton(
@@ -93,30 +44,32 @@ class _NftPortfolioScreenState extends ConsumerState<NftPortfolioScreen> {
         actions: [
           IconButton(
             icon: const Icon(Icons.refresh),
-            onPressed: _loadHoldings,
+            onPressed: () =>
+                ref.invalidate(nftHoldingsProvider(widget.walletAddress)),
           ),
         ],
       ),
-      body: _buildBody(),
+      body: _buildBody(holdingsState),
     );
   }
 
-  Widget _buildBody() {
-    if (_isLoading) {
+  Widget _buildBody(NftHoldingsState holdingsState) {
+    if (holdingsState.isLoading) {
       return const Center(child: CircularProgressIndicator());
     }
 
-    if (_error != null) {
+    if (holdingsState.error != null) {
       return Center(
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
             const Icon(Icons.error_outline, size: 64, color: Colors.red),
             const SizedBox(height: 16),
-            Text(_error!, textAlign: TextAlign.center),
+            Text(holdingsState.error!, textAlign: TextAlign.center),
             const SizedBox(height: 16),
             ElevatedButton(
-              onPressed: _loadHoldings,
+              onPressed: () =>
+                  ref.invalidate(nftHoldingsProvider(widget.walletAddress)),
               child: const Text('Retry'),
             ),
           ],
@@ -124,7 +77,7 @@ class _NftPortfolioScreenState extends ConsumerState<NftPortfolioScreen> {
       );
     }
 
-    if (_holdings.isEmpty) {
+    if (holdingsState.holdings.isEmpty) {
       return Center(
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
@@ -146,19 +99,22 @@ class _NftPortfolioScreenState extends ConsumerState<NftPortfolioScreen> {
     }
 
     return RefreshIndicator(
-      onRefresh: _loadHoldings,
+      onRefresh: () async {
+        ref.invalidate(nftHoldingsProvider(widget.walletAddress));
+      },
       child: ListView.builder(
         padding: const EdgeInsets.all(16),
-        itemCount: _holdings.length,
+        itemCount: holdingsState.holdings.length,
         itemBuilder: (context, index) {
-          final holding = _holdings[index];
-          return _buildNftCard(holding);
+          final holding = holdingsState.holdings[index];
+          return _buildNftCard(holding, holdingsState.tokensWithRentalListings);
         },
       ),
     );
   }
 
-  Widget _buildNftCard(UserNftHolding holding) {
+  Widget _buildNftCard(
+      UserNftHolding holding, Set<int> tokensWithRentalListings) {
     return Card(
       margin: const EdgeInsets.only(bottom: 16),
       clipBehavior: Clip.antiAlias,
@@ -177,7 +133,8 @@ class _NftPortfolioScreenState extends ConsumerState<NftPortfolioScreen> {
                       errorBuilder: (context, error, stackTrace) {
                         return Container(
                           color: Colors.grey[300],
-                          child: const Icon(Icons.image_not_supported, size: 64),
+                          child:
+                              const Icon(Icons.image_not_supported, size: 64),
                         );
                       },
                       loadingBuilder: (context, child, loadingProgress) {
@@ -197,7 +154,7 @@ class _NftPortfolioScreenState extends ConsumerState<NftPortfolioScreen> {
                       child: const Icon(Icons.home, size: 64),
                     ),
             ),
-            
+
             // Info
             Padding(
               padding: const EdgeInsets.all(16),
@@ -213,7 +170,7 @@ class _NftPortfolioScreenState extends ConsumerState<NftPortfolioScreen> {
                     ),
                   ),
                   const SizedBox(height: 8),
-                  
+
                   // Token ID
                   Text(
                     'Token ID: #${holding.tokenId}',
@@ -223,7 +180,7 @@ class _NftPortfolioScreenState extends ConsumerState<NftPortfolioScreen> {
                     ),
                   ),
                   const SizedBox(height: 12),
-                  
+
                   // Shares info
                   Container(
                     padding: const EdgeInsets.all(12),
@@ -279,7 +236,7 @@ class _NftPortfolioScreenState extends ConsumerState<NftPortfolioScreen> {
                       ],
                     ),
                   ),
-                  
+
                   // Action buttons
                   const SizedBox(height: 12),
                   Row(
@@ -288,9 +245,11 @@ class _NftPortfolioScreenState extends ConsumerState<NftPortfolioScreen> {
                         child: OutlinedButton.icon(
                           onPressed: () => _sellShares(holding),
                           icon: const Icon(Icons.sell, size: 14),
-                          label: const Text('Sell', style: TextStyle(fontSize: 12)),
+                          label: const Text('Sell',
+                              style: TextStyle(fontSize: 12)),
                           style: OutlinedButton.styleFrom(
-                            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 8),
+                            padding: const EdgeInsets.symmetric(
+                                horizontal: 8, vertical: 8),
                           ),
                         ),
                       ),
@@ -298,52 +257,67 @@ class _NftPortfolioScreenState extends ConsumerState<NftPortfolioScreen> {
                       Expanded(
                         child: Builder(
                           builder: (context) {
-                            final hasRentalListing = _tokensWithRentalListings.contains(holding.tokenId);
-                            final canRent = holding.isTopShareholder && !hasRentalListing;
-                            
+                            final hasRentalListing = tokensWithRentalListings
+                                .contains(holding.tokenId);
+                            final canRent =
+                                holding.isTopShareholder && !hasRentalListing;
+
                             String tooltipMessage;
                             if (hasRentalListing) {
                               tooltipMessage = 'Already listed for rent';
                             } else if (holding.isTopShareholder) {
                               tooltipMessage = 'List your property for rent';
                             } else {
-                              tooltipMessage = 'Only the top shareholder can list for rent';
+                              tooltipMessage =
+                                  'Only the top shareholder can list for rent';
                             }
-                            
+
                             return Tooltip(
                               message: tooltipMessage,
                               child: ElevatedButton.icon(
                                 onPressed: canRent
                                     ? () => _createRentalListing(holding)
                                     : () {
-                                        ScaffoldMessenger.of(context).showSnackBar(
+                                        ScaffoldMessenger.of(context)
+                                            .showSnackBar(
                                           SnackBar(
                                             content: Text(
                                               hasRentalListing
                                                   ? 'This property is already listed for rent'
                                                   : 'Only the top shareholder can list for rent\n'
-                                                    'Your ownership: ${holding.ownershipPercentage.toStringAsFixed(1)}%',
+                                                      'Your ownership: ${holding.ownershipPercentage.toStringAsFixed(1)}%',
                                             ),
-                                            backgroundColor: hasRentalListing ? Colors.orange[700] : Colors.grey[700],
-                                            duration: const Duration(seconds: 3),
+                                            backgroundColor: hasRentalListing
+                                                ? Colors.orange[700]
+                                                : Colors.grey[700],
+                                            duration:
+                                                const Duration(seconds: 3),
                                           ),
                                         );
                                       },
                                 icon: Icon(
-                                  hasRentalListing ? Icons.check_circle : Icons.home_work,
+                                  hasRentalListing
+                                      ? Icons.check_circle
+                                      : Icons.home_work,
                                   size: 14,
-                                  color: canRent ? Colors.white : Colors.grey[600],
+                                  color:
+                                      canRent ? Colors.white : Colors.grey[600],
                                 ),
                                 label: Text(
                                   hasRentalListing ? 'Listed' : 'Rent',
                                   style: TextStyle(
                                     fontSize: 12,
-                                    color: canRent ? Colors.white : Colors.grey[600],
+                                    color: canRent
+                                        ? Colors.white
+                                        : Colors.grey[600],
                                   ),
                                 ),
                                 style: ElevatedButton.styleFrom(
-                                  backgroundColor: canRent ? Colors.orange : Colors.grey[300],
-                                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 8),
+                                  backgroundColor: canRent
+                                      ? Colors.orange
+                                      : Colors.grey[300],
+                                  padding: const EdgeInsets.symmetric(
+                                      horizontal: 8, vertical: 8),
                                 ),
                               ),
                             );
@@ -355,9 +329,11 @@ class _NftPortfolioScreenState extends ConsumerState<NftPortfolioScreen> {
                         child: ElevatedButton.icon(
                           onPressed: () => _viewOnOpenSea(holding.tokenId),
                           icon: const Icon(Icons.open_in_new, size: 14),
-                          label: const Text('Sea', style: TextStyle(fontSize: 12)),
+                          label:
+                              const Text('Sea', style: TextStyle(fontSize: 12)),
                           style: ElevatedButton.styleFrom(
-                            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 8),
+                            padding: const EdgeInsets.symmetric(
+                                horizontal: 8, vertical: 8),
                           ),
                         ),
                       ),
@@ -403,7 +379,7 @@ class _NftPortfolioScreenState extends ConsumerState<NftPortfolioScreen> {
                     ),
                   ),
                 ),
-                
+
                 // Title
                 Text(
                   holding.name,
@@ -418,14 +394,17 @@ class _NftPortfolioScreenState extends ConsumerState<NftPortfolioScreen> {
                   style: TextStyle(color: Colors.grey[600]),
                 ),
                 const Divider(height: 32),
-                
+
                 // Ownership details
-                _detailRow('Your Shares', '${holding.shares} / ${holding.totalShares}'),
-                _detailRow('Ownership', '${holding.ownershipPercentage.toStringAsFixed(2)}%'),
-                _detailRow('Estimated Value', '${holding.estimatedValue} MATIC'),
-                
+                _detailRow('Your Shares',
+                    '${holding.shares} / ${holding.totalShares}'),
+                _detailRow('Ownership',
+                    '${holding.ownershipPercentage.toStringAsFixed(2)}%'),
+                _detailRow(
+                    'Estimated Value', '${holding.estimatedValue} MATIC'),
+
                 const SizedBox(height: 24),
-                
+
                 // Action buttons
                 ElevatedButton.icon(
                   onPressed: () {
@@ -480,12 +459,14 @@ class _NftPortfolioScreenState extends ConsumerState<NftPortfolioScreen> {
     try {
       final walletAddress = ref.read(walletAddressProvider);
       if (walletAddress != null) {
-        final myListingsResult = await ApiService().getMyListings(walletAddress);
+        final myListingsResult =
+            await ApiService().getMyListings(walletAddress);
         final List<dynamic> listings = myListingsResult['listings'] ?? [];
-        
+
         // Calculate total shares already listed for this token
         for (var listing in listings) {
-          if (listing['token_id'] == holding.tokenId && listing['is_active'] == true) {
+          if (listing['token_id'] == holding.tokenId &&
+              listing['is_active'] == true) {
             totalListedShares += (listing['shares_remaining'] as num).toInt();
           }
         }
@@ -550,7 +531,7 @@ class _NftPortfolioScreenState extends ConsumerState<NftPortfolioScreen> {
                       ),
                     ),
                   ),
-                  
+
                   // Title
                   Text(
                     'Sell ${holding.name}',
@@ -567,7 +548,7 @@ class _NftPortfolioScreenState extends ConsumerState<NftPortfolioScreen> {
                     style: TextStyle(color: Colors.grey[600]),
                   ),
                   const SizedBox(height: 24),
-                  
+
                   // Shares input
                   TextFormField(
                     controller: sharesController,
@@ -593,11 +574,12 @@ class _NftPortfolioScreenState extends ConsumerState<NftPortfolioScreen> {
                     },
                   ),
                   const SizedBox(height: 16),
-                  
+
                   // Price input
                   TextFormField(
                     controller: priceController,
-                    keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                    keyboardType:
+                        const TextInputType.numberWithOptions(decimal: true),
                     decoration: const InputDecoration(
                       labelText: 'Price per share',
                       hintText: '0.001',
@@ -616,9 +598,10 @@ class _NftPortfolioScreenState extends ConsumerState<NftPortfolioScreen> {
                     },
                   ),
                   const SizedBox(height: 24),
-                  
+
                   // Summary
-                  if (sharesController.text.isNotEmpty && priceController.text.isNotEmpty)
+                  if (sharesController.text.isNotEmpty &&
+                      priceController.text.isNotEmpty)
                     Container(
                       padding: const EdgeInsets.all(12),
                       decoration: BoxDecoration(
@@ -640,7 +623,7 @@ class _NftPortfolioScreenState extends ConsumerState<NftPortfolioScreen> {
                       ),
                     ),
                   const SizedBox(height: 24),
-                  
+
                   // Create Listing button
                   SizedBox(
                     width: double.infinity,
@@ -649,19 +632,20 @@ class _NftPortfolioScreenState extends ConsumerState<NftPortfolioScreen> {
                           ? null
                           : () async {
                               if (!formKey.currentState!.validate()) return;
-                              
+
                               setModalState(() => isLoading = true);
-                              
+
                               try {
                                 await _createListing(
                                   holding: holding,
                                   shares: int.parse(sharesController.text),
-                                  pricePerShare: double.parse(priceController.text),
+                                  pricePerShare:
+                                      double.parse(priceController.text),
                                 );
                                 if (mounted) Navigator.pop(context);
                               } catch (e) {
                                 if (mounted) {
-    ScaffoldMessenger.of(context).showSnackBar(
+                                  ScaffoldMessenger.of(context).showSnackBar(
                                     SnackBar(
                                       content: Text('Error: $e'),
                                       backgroundColor: Colors.red,
@@ -687,12 +671,13 @@ class _NftPortfolioScreenState extends ConsumerState<NftPortfolioScreen> {
                             )
                           : const Text(
                               'Create Listing',
-                              style: TextStyle(fontSize: 16, color: Colors.white),
+                              style:
+                                  TextStyle(fontSize: 16, color: Colors.white),
                             ),
                     ),
                   ),
                   const SizedBox(height: 12),
-                  
+
                   // Cancel button
                   SizedBox(
                     width: double.infinity,
@@ -718,11 +703,11 @@ class _NftPortfolioScreenState extends ConsumerState<NftPortfolioScreen> {
     final apiService = ApiService();
     final walletService = ref.read(walletServiceProvider);
     final walletAddress = widget.walletAddress;
-    
+
     if (walletAddress == null) {
       throw Exception('Wallet not connected');
     }
-    
+
     // Step 1: Check if asset is registered in SmartRentHub
     if (mounted) {
       ScaffoldMessenger.of(context).showSnackBar(
@@ -732,56 +717,60 @@ class _NftPortfolioScreenState extends ConsumerState<NftPortfolioScreen> {
         ),
       );
     }
-    
+
     final isRegistered = await apiService.isAssetRegistered(holding.tokenId);
-    
+
     // Step 1a: If not registered, register it first
     if (!isRegistered) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(
-            content: Text('Asset not registered. Registering in SmartRentHub...'),
+            content:
+                Text('Asset not registered. Registering in SmartRentHub...'),
             duration: Duration(seconds: 3),
             backgroundColor: Colors.orange,
           ),
         );
       }
-      
+
       // Prepare registration transaction
       final registerResult = await apiService.prepareRegisterAsset(
         tokenId: holding.tokenId,
         owner: walletAddress,
       );
-      
+
       if (registerResult['success'] != true) {
-        throw Exception(registerResult['error'] ?? 'Failed to prepare asset registration');
+        throw Exception(
+            registerResult['error'] ?? 'Failed to prepare asset registration');
       }
-      
+
       // Send registration transaction
       final registerTxHash = await walletService.sendTransaction(
         to: registerResult['contract_address'] as String,
         value: EtherAmount.zero(),
         data: registerResult['function_data'] as String,
-        gas: 500000,  // Increased for complex contract operations
+        gas: 500000, // Increased for complex contract operations
       );
-      
+
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text('⏳ Waiting for asset registration...\nTX: ${registerTxHash.substring(0, 10)}...'),
+            content: Text(
+                '⏳ Waiting for asset registration...\nTX: ${registerTxHash.substring(0, 10)}...'),
             backgroundColor: Colors.orange,
             duration: const Duration(seconds: 60),
           ),
         );
       }
-      
+
       // Wait for registration to complete
-      final registerSuccess = await apiService.waitForTransaction(registerTxHash, maxWaitSeconds: 60);
-      
+      final registerSuccess = await apiService
+          .waitForTransaction(registerTxHash, maxWaitSeconds: 60);
+
       if (!registerSuccess) {
         throw Exception('Asset registration failed');
       }
-      
+
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(
@@ -792,7 +781,7 @@ class _NftPortfolioScreenState extends ConsumerState<NftPortfolioScreen> {
         );
       }
     }
-    
+
     // Step 2: Check if SmartRentHub is approved
     if (mounted) {
       ScaffoldMessenger.of(context).showSnackBar(
@@ -802,9 +791,9 @@ class _NftPortfolioScreenState extends ConsumerState<NftPortfolioScreen> {
         ),
       );
     }
-    
+
     final isApproved = await apiService.checkApproval(walletAddress);
-    
+
     // Step 2a: If not approved, request approval first
     if (!isApproved) {
       if (mounted) {
@@ -816,43 +805,46 @@ class _NftPortfolioScreenState extends ConsumerState<NftPortfolioScreen> {
           ),
         );
       }
-      
+
       // Prepare approval transaction
       final approvalResult = await apiService.prepareApproval();
-      
+
       if (approvalResult['success'] != true) {
-        throw Exception(approvalResult['error'] ?? 'Failed to prepare approval');
+        throw Exception(
+            approvalResult['error'] ?? 'Failed to prepare approval');
       }
-      
+
       // Send approval transaction
       final approvalTxHash = await walletService.sendTransaction(
         to: approvalResult['contract_address'] as String,
         value: EtherAmount.zero(),
         data: approvalResult['function_data'] as String,
-        gas: 150000,  // Increased for safety
+        gas: 150000, // Increased for safety
       );
-      
+
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text('Approval granted! TX: ${approvalTxHash.substring(0, 10)}...'),
+            content: Text(
+                'Approval granted! TX: ${approvalTxHash.substring(0, 10)}...'),
             backgroundColor: Colors.green,
             duration: const Duration(seconds: 3),
           ),
         );
       }
-      
+
       // Wait for transaction to be confirmed on blockchain
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(
-            content: Text('⏳ Waiting for approval to be confirmed on blockchain...'),
+            content:
+                Text('⏳ Waiting for approval to be confirmed on blockchain...'),
             duration: Duration(seconds: 10),
             backgroundColor: Colors.orange,
           ),
         );
       }
-      
+
       // Poll blockchain to verify approval (max 30 seconds)
       bool approvalConfirmed = false;
       for (int i = 0; i < 15; i++) {
@@ -862,11 +854,12 @@ class _NftPortfolioScreenState extends ConsumerState<NftPortfolioScreen> {
           break;
         }
       }
-      
+
       if (!approvalConfirmed) {
-        throw Exception('Approval transaction not confirmed. Please try again.');
+        throw Exception(
+            'Approval transaction not confirmed. Please try again.');
       }
-      
+
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(
@@ -877,7 +870,7 @@ class _NftPortfolioScreenState extends ConsumerState<NftPortfolioScreen> {
         );
       }
     }
-    
+
     // Step 3: Prepare listing transaction
     if (mounted) {
       ScaffoldMessenger.of(context).showSnackBar(
@@ -887,60 +880,64 @@ class _NftPortfolioScreenState extends ConsumerState<NftPortfolioScreen> {
         ),
       );
     }
-    
+
     final prepareResult = await apiService.prepareCreateListing(
       tokenId: holding.tokenId,
       sharesForSale: shares,
       pricePerSharePol: pricePerShare,
     );
-    
+
     if (prepareResult['success'] != true) {
       throw Exception(prepareResult['error'] ?? 'Failed to prepare listing');
     }
-    
+
     final contractAddress = prepareResult['contract_address'] as String;
     final functionData = prepareResult['function_data'] as String;
-    
+
     // Step 4: Send listing transaction via WalletConnect
     final txHash = await walletService.sendTransaction(
       to: contractAddress,
       value: EtherAmount.zero(),
       data: functionData.startsWith('0x') ? functionData : '0x$functionData',
-      gas: 500000,  // Increased for createListing storage operations
+      gas: 500000, // Increased for createListing storage operations
     );
-    
+
     // Step 5: Wait for transaction to be mined
     if (mounted) {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-          content: Text('⏳ Transaction sent! Waiting for blockchain confirmation...\nTX: ${txHash.substring(0, 10)}...'),
+          content: Text(
+              '⏳ Transaction sent! Waiting for blockchain confirmation...\nTX: ${txHash.substring(0, 10)}...'),
           backgroundColor: Colors.orange,
           duration: const Duration(seconds: 60),
         ),
       );
     }
-    
+
     // Wait for confirmation (max 60 seconds)
     try {
-      final success = await apiService.waitForTransaction(txHash, maxWaitSeconds: 60);
-      
+      final success =
+          await apiService.waitForTransaction(txHash, maxWaitSeconds: 60);
+
       if (mounted) {
         if (success) {
           ScaffoldMessenger.of(context).showSnackBar(
             SnackBar(
-              content: Text('✅ Listing created successfully!\nTX: ${txHash.substring(0, 10)}...'),
+              content: Text(
+                  '✅ Listing created successfully!\nTX: ${txHash.substring(0, 10)}...'),
               backgroundColor: Colors.green,
               duration: const Duration(seconds: 5),
             ),
           );
-          
+
           // Refresh holdings and marketplace
-          _loadHoldings();
+          ref.invalidate(nftHoldingsProvider(widget.walletAddress));
           ref.invalidate(listingsProvider);
         } else {
           ScaffoldMessenger.of(context).showSnackBar(
             SnackBar(
-              content: Text('❌ Transaction failed on blockchain!\nTX: ${txHash.substring(0, 10)}...'),
+              content: Text(
+                  '❌ Transaction failed on blockchain!\nTX: ${txHash.substring(0, 10)}...'),
               backgroundColor: Colors.red,
               duration: const Duration(seconds: 5),
             ),
@@ -951,7 +948,8 @@ class _NftPortfolioScreenState extends ConsumerState<NftPortfolioScreen> {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text('⚠️ Transaction timeout. Check transaction manually.\nTX: ${txHash.substring(0, 10)}...'),
+            content: Text(
+                '⚠️ Transaction timeout. Check transaction manually.\nTX: ${txHash.substring(0, 10)}...'),
             backgroundColor: Colors.orange,
             duration: const Duration(seconds: 5),
           ),
@@ -973,14 +971,14 @@ class _NftPortfolioScreenState extends ConsumerState<NftPortfolioScreen> {
       ),
     );
   }
-  
+
   // ============================================
   // RENTAL LISTING CREATION
   // ============================================
-  
+
   void _createRentalListing(UserNftHolding holding) async {
     final priceController = TextEditingController();
-    
+
     final result = await showDialog<double>(
       context: context,
       builder: (context) => AlertDialog(
@@ -1013,16 +1011,19 @@ class _NftPortfolioScreenState extends ConsumerState<NftPortfolioScreen> {
                       ),
                       const SizedBox(height: 8),
                       Text('Token ID: #${holding.tokenId}'),
-                      Text('Your Shares: ${holding.shares} / ${holding.totalShares}'),
-                      Text('Ownership: ${holding.ownershipPercentage.toStringAsFixed(1)}%'),
+                      Text(
+                          'Your Shares: ${holding.shares} / ${holding.totalShares}'),
+                      Text(
+                          'Ownership: ${holding.ownershipPercentage.toStringAsFixed(1)}%'),
                     ],
                   ),
                 ),
               ),
               const SizedBox(height: 16),
-              
+
               // Property Traits
-              if (holding.location.isNotEmpty || holding.activeDays.isNotEmpty) ...[
+              if (holding.location.isNotEmpty ||
+                  holding.activeDays.isNotEmpty) ...[
                 const Text(
                   'Property Details:',
                   style: TextStyle(
@@ -1034,7 +1035,8 @@ class _NftPortfolioScreenState extends ConsumerState<NftPortfolioScreen> {
                 if (holding.location.isNotEmpty)
                   Row(
                     children: [
-                      Icon(Icons.location_on, size: 16, color: Colors.grey[600]),
+                      Icon(Icons.location_on,
+                          size: 16, color: Colors.grey[600]),
                       const SizedBox(width: 4),
                       Expanded(
                         child: Text(
@@ -1048,7 +1050,8 @@ class _NftPortfolioScreenState extends ConsumerState<NftPortfolioScreen> {
                   const SizedBox(height: 4),
                   Row(
                     children: [
-                      Icon(Icons.calendar_today, size: 16, color: Colors.grey[600]),
+                      Icon(Icons.calendar_today,
+                          size: 16, color: Colors.grey[600]),
                       const SizedBox(width: 4),
                       Expanded(
                         child: Text(
@@ -1061,7 +1064,7 @@ class _NftPortfolioScreenState extends ConsumerState<NftPortfolioScreen> {
                 ],
                 const SizedBox(height: 16),
               ],
-              
+
               // Price Input
               const Text(
                 'Price per Night (POL):',
@@ -1073,7 +1076,8 @@ class _NftPortfolioScreenState extends ConsumerState<NftPortfolioScreen> {
               const SizedBox(height: 8),
               TextField(
                 controller: priceController,
-                keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                keyboardType:
+                    const TextInputType.numberWithOptions(decimal: true),
                 decoration: InputDecoration(
                   hintText: 'e.g. 0.5',
                   prefixIcon: const Icon(Icons.attach_money),
@@ -1135,21 +1139,22 @@ class _NftPortfolioScreenState extends ConsumerState<NftPortfolioScreen> {
         ],
       ),
     );
-    
+
     if (result != null && mounted) {
       _processRentalListing(holding, result);
     }
   }
-  
-  Future<void> _processRentalListing(UserNftHolding holding, double pricePerNight) async {
+
+  Future<void> _processRentalListing(
+      UserNftHolding holding, double pricePerNight) async {
     try {
       final walletService = ref.read(walletServiceProvider);
       final walletAddress = widget.walletAddress;
-      
+
       if (walletAddress == null) {
         throw Exception('Wallet not connected');
       }
-      
+
       // Show loading dialog
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
@@ -1159,21 +1164,21 @@ class _NftPortfolioScreenState extends ConsumerState<NftPortfolioScreen> {
           ),
         );
       }
-      
+
       // Prepare transaction from backend
       final txData = await _rentalService.prepareCreateRentalListing(
         tokenId: holding.tokenId,
         pricePerNightPol: pricePerNight,
         ownerAddress: walletAddress,
       );
-      
+
       if (txData['success'] != true) {
         throw Exception(txData['error'] ?? 'Failed to prepare rental listing');
       }
-      
+
       final contractAddress = txData['contract_address'] as String;
       final functionData = txData['function_data'] as String;
-      
+
       // Send transaction via WalletConnect
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
@@ -1183,16 +1188,16 @@ class _NftPortfolioScreenState extends ConsumerState<NftPortfolioScreen> {
           ),
         );
       }
-      
+
       final txHash = await walletService.sendTransaction(
         to: contractAddress,
         value: EtherAmount.zero(),
         data: functionData.startsWith('0x') ? functionData : '0x$functionData',
         gas: 500000,
       );
-      
+
       if (!mounted) return;
-      
+
       // Show success message
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
@@ -1205,13 +1210,12 @@ class _NftPortfolioScreenState extends ConsumerState<NftPortfolioScreen> {
           duration: const Duration(seconds: 5),
         ),
       );
-      
+
       // Refresh holdings
-      await _loadHoldings();
-      
+      ref.invalidate(nftHoldingsProvider(widget.walletAddress));
     } catch (e) {
       if (!mounted) return;
-      
+
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: Text('❌ Failed to create rental listing: $e'),
@@ -1222,4 +1226,3 @@ class _NftPortfolioScreenState extends ConsumerState<NftPortfolioScreen> {
     }
   }
 }
-

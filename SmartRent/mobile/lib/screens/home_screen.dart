@@ -14,6 +14,7 @@ import '../components/wallet_info_widget.dart';
 import '../core/providers/auth_provider.dart';
 import '../core/providers/asset_provider.dart'; // Includes listingsProvider, MarketplaceListing
 import '../core/providers/wallet_provider.dart';
+import '../core/providers/rental_provider.dart'; // Includes rentalListingsProvider
 
 /// ==========================================================
 /// HOME SCREEN - BLOCKCHAIN MIGRATION VERSION
@@ -31,46 +32,24 @@ class HomeScreen extends ConsumerStatefulWidget {
 
 enum SortBy { highestPrice, lowestPrice }
 
-class _HomeScreenState extends ConsumerState<HomeScreen> with SingleTickerProviderStateMixin {
+class _HomeScreenState extends ConsumerState<HomeScreen>
+    with SingleTickerProviderStateMixin {
   final _searchController = TextEditingController();
   String _selectedCategory = '';
   late TabController _tabController;
-  
+
   // Marketplace filters and sorting
   SortBy? _sortBy;
   bool _filterAffordable = false;
   bool _filterMyListings = false;
-  
-  // Rental service and state
+
+  // Service for rental operations (data loading is done by provider)
   final _rentalService = RentalService();
-  List<RentalListing> _rentalListings = [];
-  bool _isLoadingRentals = false;
-  String? _lastWalletAddress; // Track wallet changes
 
   @override
   void initState() {
     super.initState();
     _tabController = TabController(length: 3, vsync: this);
-    
-    // Listen to tab changes to refresh Rentplace when opened
-    _tabController.addListener(() {
-      if (_tabController.index == 2 && mounted) { // Index 2 is Rentplace
-        _checkAndRefreshRentals();
-      }
-    });
-  }
-  
-  /// Check if wallet changed and refresh rentals if needed
-  void _checkAndRefreshRentals() {
-    final currentWallet = ref.read(walletProvider).address;
-    
-    // Refresh if:
-    // 1. First time loading (list empty)
-    // 2. Wallet changed since last load
-    if (_rentalListings.isEmpty || currentWallet != _lastWalletAddress) {
-      _lastWalletAddress = currentWallet;
-      _loadRentalListings();
-    }
   }
 
   @override
@@ -155,7 +134,8 @@ class _HomeScreenState extends ConsumerState<HomeScreen> with SingleTickerProvid
                   context: context,
                   builder: (context) => AlertDialog(
                     title: const Text('Logout'),
-                    content: const Text('Are you sure you want to disconnect your wallet?'),
+                    content: const Text(
+                        'Are you sure you want to disconnect your wallet?'),
                     actions: [
                       TextButton(
                         onPressed: () => Navigator.of(context).pop(false),
@@ -213,7 +193,8 @@ class _HomeScreenState extends ConsumerState<HomeScreen> with SingleTickerProvid
                   children: [
                     Icon(Icons.logout, size: 20, color: Colors.red),
                     SizedBox(width: 8),
-                    Text('Disconnect Wallet', style: TextStyle(color: Colors.red)),
+                    Text('Disconnect Wallet',
+                        style: TextStyle(color: Colors.red)),
                   ],
                 ),
               ),
@@ -277,7 +258,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> with SingleTickerProvid
         // Wallet Info Widget
         const WalletInfoWidget(),
         const SizedBox(height: AppSpacing.md),
-        
+
         // Welcome Banner
         Container(
           padding: const EdgeInsets.all(AppSpacing.lg),
@@ -357,7 +338,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> with SingleTickerProvid
 
   Widget _buildQuickStats(ThemeData theme, AssetListState assetListState) {
     final assetCount = assetListState.assets.length;
-    
+
     return Row(
       children: [
         Expanded(
@@ -455,7 +436,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> with SingleTickerProvid
             itemBuilder: (context, index) {
               final category = categories[index];
               final isSelected = _selectedCategory == category;
-              
+
               return Padding(
                 padding: EdgeInsets.only(
                   right: index < categories.length - 1 ? AppSpacing.sm : 0,
@@ -485,7 +466,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> with SingleTickerProvid
     VoidCallback onTap,
   ) {
     final color = AppColors.categoryColors[category] ?? AppColors.grey;
-    
+
     return GestureDetector(
       onTap: onTap,
       child: Container(
@@ -520,7 +501,8 @@ class _HomeScreenState extends ConsumerState<HomeScreen> with SingleTickerProvid
     );
   }
 
-  Widget _buildFeaturedAssetsSection(AssetListState assetListState, ThemeData theme) {
+  Widget _buildFeaturedAssetsSection(
+      AssetListState assetListState, ThemeData theme) {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -547,11 +529,12 @@ class _HomeScreenState extends ConsumerState<HomeScreen> with SingleTickerProvid
     );
   }
 
-  Widget _buildAssetContent(AssetListState state, ThemeData theme, {bool isFeatured = false}) {
+  Widget _buildAssetContent(AssetListState state, ThemeData theme,
+      {bool isFeatured = false}) {
     if (state.isLoading) {
       return const Center(child: CircularProgressIndicator());
     }
-    
+
     if (state.error != null) {
       return Center(
         child: Column(
@@ -579,7 +562,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> with SingleTickerProvid
     }
 
     final assets = state.assets;
-    
+
     if (assets.isEmpty) {
       return Container(
         padding: const EdgeInsets.all(AppSpacing.xl),
@@ -747,11 +730,11 @@ class _HomeScreenState extends ConsumerState<HomeScreen> with SingleTickerProvid
   Widget _buildMarketplaceTab(ThemeData theme) {
     final listingsState = ref.watch(listingsProvider);
     final walletAddress = ref.watch(walletAddressProvider);
-    
+
     // Get user's balance for filtering (convert String to double)
     final walletState = ref.watch(walletProvider);
-    final userBalance = walletState.balance != null 
-        ? double.tryParse(walletState.balance!) 
+    final userBalance = walletState.balance != null
+        ? double.tryParse(walletState.balance!)
         : null;
 
     return RefreshIndicator(
@@ -770,10 +753,10 @@ class _HomeScreenState extends ConsumerState<HomeScreen> with SingleTickerProvid
                   child: OutlinedButton.icon(
                     onPressed: () => _showSortOptions(theme),
                     icon: const Icon(Icons.sort),
-                    label: Text(_sortBy == null 
-                        ? 'Sort' 
-                        : _sortBy == SortBy.highestPrice 
-                            ? 'Highest Price' 
+                    label: Text(_sortBy == null
+                        ? 'Sort'
+                        : _sortBy == SortBy.highestPrice
+                            ? 'Highest Price'
                             : 'Lowest Price'),
                   ),
                 ),
@@ -784,14 +767,18 @@ class _HomeScreenState extends ConsumerState<HomeScreen> with SingleTickerProvid
                     onPressed: () => _showFilterOptions(theme),
                     icon: Icon(
                       Icons.filter_list,
-                      color: (_filterAffordable || _filterMyListings) ? AppColors.primary : null,
+                      color: (_filterAffordable || _filterMyListings)
+                          ? AppColors.primary
+                          : null,
                     ),
                     label: Text(
-                      (_filterAffordable || _filterMyListings) 
-                          ? 'Filter (${(_filterAffordable ? 1 : 0) + (_filterMyListings ? 1 : 0)})' 
+                      (_filterAffordable || _filterMyListings)
+                          ? 'Filter (${(_filterAffordable ? 1 : 0) + (_filterMyListings ? 1 : 0)})'
                           : 'Filter',
                       style: TextStyle(
-                        color: (_filterAffordable || _filterMyListings) ? AppColors.primary : null,
+                        color: (_filterAffordable || _filterMyListings)
+                            ? AppColors.primary
+                            : null,
                       ),
                     ),
                   ),
@@ -808,7 +795,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> with SingleTickerProvid
                     : listingsState.listings.isEmpty
                         ? _buildEmptyMarketplace(theme)
                         : _buildListingsGrid(
-                            theme, 
+                            theme,
                             _filterAndSortListings(
                               listingsState.listings,
                               userBalance,
@@ -893,7 +880,8 @@ class _HomeScreenState extends ConsumerState<HomeScreen> with SingleTickerProvid
     );
   }
 
-  Widget _buildListingsGrid(ThemeData theme, List<MarketplaceListing> listings) {
+  Widget _buildListingsGrid(
+      ThemeData theme, List<MarketplaceListing> listings) {
     return ListView.builder(
       padding: const EdgeInsets.all(AppSpacing.md),
       itemCount: listings.length,
@@ -906,16 +894,17 @@ class _HomeScreenState extends ConsumerState<HomeScreen> with SingleTickerProvid
 
   Widget _buildListingCard(ThemeData theme, MarketplaceListing listing) {
     final walletAddress = ref.watch(walletAddressProvider);
-    final isOwnListing = walletAddress != null && 
-                         listing.seller.toLowerCase() == walletAddress.toLowerCase();
-    
+    final isOwnListing = walletAddress != null &&
+        listing.seller.toLowerCase() == walletAddress.toLowerCase();
+
     return Card(
       margin: const EdgeInsets.only(bottom: AppSpacing.md),
       child: InkWell(
         onTap: () {
           // TODO: Navigate to listing detail
           ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(content: Text('Listing #${listing.listingId} - Coming soon!')),
+            SnackBar(
+                content: Text('Listing #${listing.listingId} - Coming soon!')),
           );
         },
         borderRadius: BorderRadius.circular(AppRadius.md),
@@ -924,7 +913,8 @@ class _HomeScreenState extends ConsumerState<HomeScreen> with SingleTickerProvid
           children: [
             // Image
             ClipRRect(
-              borderRadius: const BorderRadius.vertical(top: Radius.circular(AppRadius.md)),
+              borderRadius: const BorderRadius.vertical(
+                  top: Radius.circular(AppRadius.md)),
               child: listing.assetImage.isNotEmpty
                   ? Image.network(
                       listing.assetImage,
@@ -934,14 +924,16 @@ class _HomeScreenState extends ConsumerState<HomeScreen> with SingleTickerProvid
                       errorBuilder: (_, __, ___) => Container(
                         height: 150,
                         color: AppColors.lightGrey,
-                        child: const Icon(Icons.home, size: 48, color: AppColors.grey),
+                        child: const Icon(Icons.home,
+                            size: 48, color: AppColors.grey),
                       ),
                     )
                   : Container(
                       height: 150,
                       color: AppColors.lightGrey,
                       child: const Center(
-                        child: Icon(Icons.home, size: 48, color: AppColors.grey),
+                        child:
+                            Icon(Icons.home, size: 48, color: AppColors.grey),
                       ),
                     ),
             ),
@@ -965,7 +957,8 @@ class _HomeScreenState extends ConsumerState<HomeScreen> with SingleTickerProvid
                         ),
                       ),
                       Container(
-                        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                        padding: const EdgeInsets.symmetric(
+                            horizontal: 8, vertical: 4),
                         decoration: BoxDecoration(
                           color: AppColors.primary.withOpacity(0.1),
                           borderRadius: BorderRadius.circular(4),
@@ -981,15 +974,17 @@ class _HomeScreenState extends ConsumerState<HomeScreen> with SingleTickerProvid
                     ],
                   ),
                   const SizedBox(height: AppSpacing.sm),
-                  
+
                   // Shares info
                   Row(
                     children: [
-                      Icon(Icons.pie_chart_outline, size: 16, color: AppColors.grey),
+                      Icon(Icons.pie_chart_outline,
+                          size: 16, color: AppColors.grey),
                       const SizedBox(width: 4),
                       Text(
                         '${listing.sharesRemaining} / ${listing.totalShares} shares',
-                        style: theme.textTheme.bodySmall?.copyWith(color: AppColors.grey),
+                        style: theme.textTheme.bodySmall
+                            ?.copyWith(color: AppColors.grey),
                       ),
                       const SizedBox(width: 8),
                       Text(
@@ -1002,7 +997,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> with SingleTickerProvid
                     ],
                   ),
                   const SizedBox(height: AppSpacing.md),
-                  
+
                   // Price
                   Row(
                     mainAxisAlignment: MainAxisAlignment.spaceBetween,
@@ -1012,7 +1007,8 @@ class _HomeScreenState extends ConsumerState<HomeScreen> with SingleTickerProvid
                         children: [
                           Text(
                             'Price per share',
-                            style: theme.textTheme.bodySmall?.copyWith(color: AppColors.grey),
+                            style: theme.textTheme.bodySmall
+                                ?.copyWith(color: AppColors.grey),
                           ),
                           Text(
                             '${listing.pricePerSharePol.toStringAsFixed(4)} POL',
@@ -1028,12 +1024,15 @@ class _HomeScreenState extends ConsumerState<HomeScreen> with SingleTickerProvid
                               mainAxisSize: MainAxisSize.min,
                               children: [
                                 OutlinedButton.icon(
-                                  onPressed: () => _showEditListingDialog(listing),
+                                  onPressed: () =>
+                                      _showEditListingDialog(listing),
                                   icon: const Icon(Icons.edit, size: 16),
-                                  label: const Text('Edit', style: TextStyle(fontSize: 13)),
+                                  label: const Text('Edit',
+                                      style: TextStyle(fontSize: 13)),
                                   style: OutlinedButton.styleFrom(
                                     foregroundColor: AppColors.primary,
-                                    padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                                    padding: const EdgeInsets.symmetric(
+                                        horizontal: 12, vertical: 8),
                                     minimumSize: const Size(0, 32),
                                   ),
                                 ),
@@ -1041,10 +1040,12 @@ class _HomeScreenState extends ConsumerState<HomeScreen> with SingleTickerProvid
                                 OutlinedButton.icon(
                                   onPressed: () => _removeListing(listing),
                                   icon: const Icon(Icons.delete, size: 16),
-                                  label: const Text('Remove', style: TextStyle(fontSize: 13)),
+                                  label: const Text('Remove',
+                                      style: TextStyle(fontSize: 13)),
                                   style: OutlinedButton.styleFrom(
                                     foregroundColor: AppColors.error,
-                                    padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                                    padding: const EdgeInsets.symmetric(
+                                        horizontal: 12, vertical: 8),
                                     minimumSize: const Size(0, 32),
                                   ),
                                 ),
@@ -1059,12 +1060,13 @@ class _HomeScreenState extends ConsumerState<HomeScreen> with SingleTickerProvid
                             ),
                     ],
                   ),
-                  
+
                   // Seller
                   const SizedBox(height: AppSpacing.sm),
                   Text(
                     'Seller: ${listing.seller.substring(0, 6)}...${listing.seller.substring(listing.seller.length - 4)}',
-                    style: theme.textTheme.bodySmall?.copyWith(color: AppColors.grey),
+                    style: theme.textTheme.bodySmall
+                        ?.copyWith(color: AppColors.grey),
                   ),
                 ],
               ),
@@ -1088,7 +1090,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> with SingleTickerProvid
       builder: (context) => StatefulBuilder(
         builder: (context, setModalState) {
           final totalCost = sharesToBuy * listing.pricePerSharePol;
-          
+
           return Container(
             padding: EdgeInsets.only(
               bottom: MediaQuery.of(context).viewInsets.bottom,
@@ -1117,7 +1119,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> with SingleTickerProvid
                         ),
                       ),
                     ),
-                    
+
                     // Title
                     Text(
                       'Buy ${listing.assetName}',
@@ -1132,7 +1134,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> with SingleTickerProvid
                       style: TextStyle(color: Colors.grey[600]),
                     ),
                     const SizedBox(height: 24),
-                    
+
                     // Shares input
                     TextFormField(
                       controller: sharesController,
@@ -1163,7 +1165,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> with SingleTickerProvid
                       },
                     ),
                     const SizedBox(height: 24),
-                    
+
                     // Summary
                     Container(
                       padding: const EdgeInsets.all(16),
@@ -1178,7 +1180,8 @@ class _HomeScreenState extends ConsumerState<HomeScreen> with SingleTickerProvid
                             mainAxisAlignment: MainAxisAlignment.spaceBetween,
                             children: [
                               const Text('Price per share:'),
-                              Text('${listing.pricePerSharePol.toStringAsFixed(4)} POL'),
+                              Text(
+                                  '${listing.pricePerSharePol.toStringAsFixed(4)} POL'),
                             ],
                           ),
                           const SizedBox(height: 8),
@@ -1195,7 +1198,8 @@ class _HomeScreenState extends ConsumerState<HomeScreen> with SingleTickerProvid
                             children: [
                               const Text(
                                 'Total Cost:',
-                                style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
+                                style: TextStyle(
+                                    fontWeight: FontWeight.bold, fontSize: 16),
                               ),
                               Text(
                                 '${totalCost.toStringAsFixed(4)} POL',
@@ -1211,7 +1215,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> with SingleTickerProvid
                       ),
                     ),
                     const SizedBox(height: 24),
-                    
+
                     // Buy button
                     SizedBox(
                       width: double.infinity,
@@ -1220,9 +1224,9 @@ class _HomeScreenState extends ConsumerState<HomeScreen> with SingleTickerProvid
                             ? null
                             : () async {
                                 if (!formKey.currentState!.validate()) return;
-                                
+
                                 setModalState(() => isLoading = true);
-                                
+
                                 try {
                                   await _executeBuy(
                                     listing: listing,
@@ -1257,12 +1261,13 @@ class _HomeScreenState extends ConsumerState<HomeScreen> with SingleTickerProvid
                               )
                             : Text(
                                 'Buy for ${totalCost.toStringAsFixed(4)} POL',
-                                style: const TextStyle(fontSize: 16, color: Colors.white),
+                                style: const TextStyle(
+                                    fontSize: 16, color: Colors.white),
                               ),
                       ),
                     ),
                     const SizedBox(height: 12),
-                    
+
                     // Cancel button
                     SizedBox(
                       width: double.infinity,
@@ -1287,21 +1292,22 @@ class _HomeScreenState extends ConsumerState<HomeScreen> with SingleTickerProvid
   }) async {
     final apiService = ApiService();
     final walletService = ref.read(walletServiceProvider);
-    
+
     // Step 1: Prepare buy transaction
     final prepareResult = await apiService.prepareBuyListing(
       listingId: listing.listingId,
       sharesToBuy: sharesToBuy,
     );
-    
+
     if (prepareResult['success'] != true) {
-      throw Exception(prepareResult['error'] ?? 'Failed to prepare buy transaction');
+      throw Exception(
+          prepareResult['error'] ?? 'Failed to prepare buy transaction');
     }
-    
+
     final contractAddress = prepareResult['contract_address'] as String;
     final functionData = prepareResult['function_data'] as String;
     final valueWei = BigInt.parse(prepareResult['value_wei'] as String);
-    
+
     // Step 2: Send transaction via WalletConnect (with POL value)
     final txHash = await walletService.sendTransaction(
       to: contractAddress,
@@ -1309,38 +1315,41 @@ class _HomeScreenState extends ConsumerState<HomeScreen> with SingleTickerProvid
       data: functionData.startsWith('0x') ? functionData : '0x$functionData',
       gas: 300000,
     );
-    
+
     // Step 3: Show pending message
     if (mounted) {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-          content: Text('⏳ Waiting for transaction to complete...\nTX: ${txHash.substring(0, 10)}...'),
+          content: Text(
+              '⏳ Waiting for transaction to complete...\nTX: ${txHash.substring(0, 10)}...'),
           backgroundColor: Colors.orange,
           duration: const Duration(seconds: 60),
         ),
       );
     }
-    
+
     // Step 4: Wait for transaction to be mined
-    final success = await apiService.waitForTransaction(txHash, maxWaitSeconds: 60);
-    
+    final success =
+        await apiService.waitForTransaction(txHash, maxWaitSeconds: 60);
+
     if (!success) {
       throw Exception('Transaction failed or timed out');
     }
-    
+
     // Step 5: Show success and refresh
     if (mounted) {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-          content: Text('✅ Purchase successful! TX: ${txHash.substring(0, 10)}...'),
+          content:
+              Text('✅ Purchase successful! TX: ${txHash.substring(0, 10)}...'),
           backgroundColor: Colors.green,
           duration: const Duration(seconds: 5),
         ),
       );
-      
+
       // Refresh listings - now the blockchain is updated!
       ref.invalidate(listingsProvider);
-      
+
       // Also refresh user's assets
       ref.invalidate(allAssetsProvider);
     }
@@ -1353,31 +1362,33 @@ class _HomeScreenState extends ConsumerState<HomeScreen> with SingleTickerProvid
     String? walletAddress,
   ) {
     var filtered = listings;
-    
+
     // Apply "Listed by Me" filter
     if (_filterMyListings && walletAddress != null) {
       filtered = filtered.where((listing) {
         return listing.seller.toLowerCase() == walletAddress.toLowerCase();
       }).toList();
     }
-    
+
     // Apply affordable filter
     if (_filterAffordable && userBalance != null) {
       filtered = filtered.where((listing) {
         return listing.pricePerSharePol <= userBalance;
       }).toList();
     }
-    
+
     // Apply sorting
     if (_sortBy != null) {
       filtered = List.from(filtered);
       if (_sortBy == SortBy.highestPrice) {
-        filtered.sort((a, b) => b.pricePerSharePol.compareTo(a.pricePerSharePol));
+        filtered
+            .sort((a, b) => b.pricePerSharePol.compareTo(a.pricePerSharePol));
       } else {
-        filtered.sort((a, b) => a.pricePerSharePol.compareTo(b.pricePerSharePol));
+        filtered
+            .sort((a, b) => a.pricePerSharePol.compareTo(b.pricePerSharePol));
       }
     }
-    
+
     return filtered;
   }
 
@@ -1400,7 +1411,8 @@ class _HomeScreenState extends ConsumerState<HomeScreen> with SingleTickerProvid
             ListTile(
               leading: Icon(
                 Icons.arrow_downward,
-                color: _sortBy == SortBy.highestPrice ? AppColors.primary : null,
+                color:
+                    _sortBy == SortBy.highestPrice ? AppColors.primary : null,
               ),
               title: const Text('Highest Price'),
               selected: _sortBy == SortBy.highestPrice,
@@ -1517,7 +1529,8 @@ class _HomeScreenState extends ConsumerState<HomeScreen> with SingleTickerProvid
                 children: [
                   CircularProgressIndicator(),
                   SizedBox(height: 16),
-                  Text('Sign transaction in wallet...', style: TextStyle(fontSize: 16)),
+                  Text('Sign transaction in wallet...',
+                      style: TextStyle(fontSize: 16)),
                 ],
               ),
             ),
@@ -1531,7 +1544,8 @@ class _HomeScreenState extends ConsumerState<HomeScreen> with SingleTickerProvid
       final walletService = ref.read(walletServiceProvider);
 
       // Prepare cancel transaction
-      final prepareResult = await apiService.prepareCancelListing(listing.listingId);
+      final prepareResult =
+          await apiService.prepareCancelListing(listing.listingId);
 
       if (prepareResult['success'] != true) {
         throw Exception(prepareResult['error'] ?? 'Failed to prepare cancel');
@@ -1560,9 +1574,10 @@ class _HomeScreenState extends ConsumerState<HomeScreen> with SingleTickerProvid
                   children: [
                     const CircularProgressIndicator(),
                     const SizedBox(height: 16),
-                    Text('Waiting for confirmation...\n${txHash.substring(0, 10)}...', 
-                      textAlign: TextAlign.center,
-                      style: const TextStyle(fontSize: 16)),
+                    Text(
+                        'Waiting for confirmation...\n${txHash.substring(0, 10)}...',
+                        textAlign: TextAlign.center,
+                        style: const TextStyle(fontSize: 16)),
                   ],
                 ),
               ),
@@ -1572,8 +1587,9 @@ class _HomeScreenState extends ConsumerState<HomeScreen> with SingleTickerProvid
       }
 
       // Wait for confirmation
-      final success = await apiService.waitForTransaction(txHash, maxWaitSeconds: 60);
-      
+      final success =
+          await apiService.waitForTransaction(txHash, maxWaitSeconds: 60);
+
       // Close loading dialog
       if (mounted) Navigator.pop(context);
 
@@ -1581,7 +1597,8 @@ class _HomeScreenState extends ConsumerState<HomeScreen> with SingleTickerProvid
         if (success) {
           ScaffoldMessenger.of(context).showSnackBar(
             SnackBar(
-              content: Text('✅ Listing removed!\nTX: ${txHash.substring(0, 10)}...'),
+              content:
+                  Text('✅ Listing removed!\nTX: ${txHash.substring(0, 10)}...'),
               backgroundColor: Colors.green,
               duration: const Duration(seconds: 5),
             ),
@@ -1594,7 +1611,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> with SingleTickerProvid
     } catch (e) {
       // Close loading dialog if open
       if (mounted) Navigator.pop(context);
-      
+
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
@@ -1649,7 +1666,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> with SingleTickerProvid
                     ),
                   ),
                 ),
-                
+
                 // Title
                 Text(
                   'Edit Listing - ${listing.assetName}',
@@ -1659,7 +1676,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> with SingleTickerProvid
                   ),
                 ),
                 const SizedBox(height: 24),
-                
+
                 // Shares input
                 TextFormField(
                   controller: sharesController,
@@ -1680,7 +1697,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> with SingleTickerProvid
                   },
                 ),
                 const SizedBox(height: 16),
-                
+
                 // Price input
                 TextFormField(
                   controller: priceController,
@@ -1688,7 +1705,8 @@ class _HomeScreenState extends ConsumerState<HomeScreen> with SingleTickerProvid
                     labelText: 'Price per Share (POL)',
                     border: OutlineInputBorder(),
                   ),
-                  keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                  keyboardType:
+                      const TextInputType.numberWithOptions(decimal: true),
                   validator: (value) {
                     if (value == null || value.isEmpty) {
                       return 'Please enter price';
@@ -1701,17 +1719,17 @@ class _HomeScreenState extends ConsumerState<HomeScreen> with SingleTickerProvid
                   },
                 ),
                 const SizedBox(height: 24),
-                
+
                 // Update button
                 SizedBox(
                   width: double.infinity,
                   child: ElevatedButton(
                     onPressed: () async {
                       if (!formKey.currentState!.validate()) return;
-                      
+
                       final shares = int.parse(sharesController.text);
                       final price = double.parse(priceController.text);
-                      
+
                       Navigator.pop(context);
                       await _executeEditListing(listing, shares, price);
                     },
@@ -1726,7 +1744,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> with SingleTickerProvid
                   ),
                 ),
                 const SizedBox(height: 12),
-                
+
                 // Cancel button
                 SizedBox(
                   width: double.infinity,
@@ -1763,9 +1781,9 @@ class _HomeScreenState extends ConsumerState<HomeScreen> with SingleTickerProvid
                 children: [
                   CircularProgressIndicator(),
                   SizedBox(height: 16),
-                  Text('Step 1/2: Sign cancel transaction...', 
-                    textAlign: TextAlign.center,
-                    style: TextStyle(fontSize: 16)),
+                  Text('Step 1/2: Sign cancel transaction...',
+                      textAlign: TextAlign.center,
+                      style: TextStyle(fontSize: 16)),
                 ],
               ),
             ),
@@ -1779,7 +1797,8 @@ class _HomeScreenState extends ConsumerState<HomeScreen> with SingleTickerProvid
       final walletService = ref.read(walletServiceProvider);
 
       // Step 1: Cancel old listing
-      final cancelResult = await apiService.prepareCancelListing(oldListing.listingId);
+      final cancelResult =
+          await apiService.prepareCancelListing(oldListing.listingId);
       if (cancelResult['success'] != true) {
         throw Exception('Failed to prepare cancel: ${cancelResult['error']}');
       }
@@ -1806,9 +1825,10 @@ class _HomeScreenState extends ConsumerState<HomeScreen> with SingleTickerProvid
                   children: [
                     const CircularProgressIndicator(),
                     const SizedBox(height: 16),
-                    Text('Step 1/2: Waiting for confirmation...\n${cancelTxHash.substring(0, 10)}...', 
-                      textAlign: TextAlign.center,
-                      style: const TextStyle(fontSize: 16)),
+                    Text(
+                        'Step 1/2: Waiting for confirmation...\n${cancelTxHash.substring(0, 10)}...',
+                        textAlign: TextAlign.center,
+                        style: const TextStyle(fontSize: 16)),
                   ],
                 ),
               ),
@@ -1837,9 +1857,9 @@ class _HomeScreenState extends ConsumerState<HomeScreen> with SingleTickerProvid
                   children: [
                     CircularProgressIndicator(),
                     SizedBox(height: 16),
-                    Text('Step 2/2: Sign new listing transaction...', 
-                      textAlign: TextAlign.center,
-                      style: TextStyle(fontSize: 16)),
+                    Text('Step 2/2: Sign new listing transaction...',
+                        textAlign: TextAlign.center,
+                        style: TextStyle(fontSize: 16)),
                   ],
                 ),
               ),
@@ -1855,7 +1875,8 @@ class _HomeScreenState extends ConsumerState<HomeScreen> with SingleTickerProvid
       );
 
       if (createResult['success'] != true) {
-        throw Exception('Failed to prepare new listing: ${createResult['error']}');
+        throw Exception(
+            'Failed to prepare new listing: ${createResult['error']}');
       }
 
       final createTxHash = await walletService.sendTransaction(
@@ -1880,9 +1901,10 @@ class _HomeScreenState extends ConsumerState<HomeScreen> with SingleTickerProvid
                   children: [
                     const CircularProgressIndicator(),
                     const SizedBox(height: 16),
-                    Text('Step 2/2: Waiting for confirmation...\n${createTxHash.substring(0, 10)}...', 
-                      textAlign: TextAlign.center,
-                      style: const TextStyle(fontSize: 16)),
+                    Text(
+                        'Step 2/2: Waiting for confirmation...\n${createTxHash.substring(0, 10)}...',
+                        textAlign: TextAlign.center,
+                        style: const TextStyle(fontSize: 16)),
                   ],
                 ),
               ),
@@ -1892,7 +1914,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> with SingleTickerProvid
       }
 
       final createSuccess = await apiService.waitForTransaction(createTxHash);
-      
+
       // Close loading dialog
       if (mounted) Navigator.pop(context);
 
@@ -1900,7 +1922,8 @@ class _HomeScreenState extends ConsumerState<HomeScreen> with SingleTickerProvid
         if (createSuccess) {
           ScaffoldMessenger.of(context).showSnackBar(
             SnackBar(
-              content: Text('✅ Listing updated!\nNew: $newShares shares @ $newPrice POL'),
+              content: Text(
+                  '✅ Listing updated!\nNew: $newShares shares @ $newPrice POL'),
               backgroundColor: Colors.green,
               duration: const Duration(seconds: 5),
             ),
@@ -1913,7 +1936,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> with SingleTickerProvid
     } catch (e) {
       // Close loading dialog if open
       if (mounted) Navigator.pop(context);
-      
+
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
@@ -1925,35 +1948,19 @@ class _HomeScreenState extends ConsumerState<HomeScreen> with SingleTickerProvid
       }
     }
   }
-  
+
   // ============================================
   // RENTAL FUNCTIONS
   // ============================================
-  
-  Future<void> _loadRentalListings() async {
-    setState(() {
-      _isLoadingRentals = true;
-    });
-    
-    try {
-      final listings = await _rentalService.getAllRentalListings();
-      setState(() {
-        _rentalListings = listings;
-        _isLoadingRentals = false;
-      });
-    } catch (e) {
-      print('Error loading rental listings: $e');
-      setState(() {
-        _isLoadingRentals = false;
-      });
-    }
-  }
 
   Widget _buildRentplaceTab(ThemeData theme) {
-    // Rentals are loaded automatically when tab is opened (see initState)
-    
+    // Use the Riverpod provider for rental listings (async & cached like marketplace)
+    final rentalListingsState = ref.watch(rentalListingsProvider);
+
     return RefreshIndicator(
-      onRefresh: _loadRentalListings,
+      onRefresh: () async {
+        ref.invalidate(rentalListingsProvider);
+      },
       child: SingleChildScrollView(
         physics: const AlwaysScrollableScrollPhysics(),
         padding: const EdgeInsets.all(AppSpacing.md),
@@ -1961,14 +1968,43 @@ class _HomeScreenState extends ConsumerState<HomeScreen> with SingleTickerProvid
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             // Rental Listings Section
-            if (_isLoadingRentals)
+            if (rentalListingsState.isLoading)
               const Center(
                 child: Padding(
                   padding: EdgeInsets.all(AppSpacing.xl),
                   child: CircularProgressIndicator(),
                 ),
               )
-            else if (_rentalListings.isEmpty)
+            else if (rentalListingsState.error != null)
+              Center(
+                child: Padding(
+                  padding: const EdgeInsets.all(AppSpacing.xl),
+                  child: Column(
+                    children: [
+                      Icon(Icons.error_outline,
+                          size: 64, color: AppColors.error),
+                      const SizedBox(height: AppSpacing.md),
+                      Text(
+                        'Failed to load rentals',
+                        style: theme.textTheme.titleMedium,
+                      ),
+                      const SizedBox(height: AppSpacing.sm),
+                      Text(
+                        rentalListingsState.error!,
+                        style: theme.textTheme.bodySmall
+                            ?.copyWith(color: AppColors.grey),
+                        textAlign: TextAlign.center,
+                      ),
+                      const SizedBox(height: AppSpacing.lg),
+                      ElevatedButton(
+                        onPressed: () => ref.invalidate(rentalListingsProvider),
+                        child: const Text('Retry'),
+                      ),
+                    ],
+                  ),
+                ),
+              )
+            else if (rentalListingsState.listings.isEmpty)
               Center(
                 child: Padding(
                   padding: const EdgeInsets.all(AppSpacing.xl),
@@ -2008,9 +2044,9 @@ class _HomeScreenState extends ConsumerState<HomeScreen> with SingleTickerProvid
                   crossAxisSpacing: AppSpacing.md,
                   mainAxisSpacing: AppSpacing.md,
                 ),
-                itemCount: _rentalListings.length,
+                itemCount: rentalListingsState.listings.length,
                 itemBuilder: (context, index) {
-                  final listing = _rentalListings[index];
+                  final listing = rentalListingsState.listings[index];
                   return _buildRentalListingCard(listing, theme);
                 },
               ),
@@ -2019,20 +2055,21 @@ class _HomeScreenState extends ConsumerState<HomeScreen> with SingleTickerProvid
       ),
     );
   }
-  
+
   Widget _buildRentalListingCard(RentalListing listing, ThemeData theme) {
     final imageUrl = listing.imageUrl ?? '';
     final propertyName = listing.propertyName ?? 'Property #${listing.tokenId}';
-    
+
     // Check if this is user's listing
     final walletState = ref.watch(walletProvider);
     final userAddress = walletState.address?.toLowerCase() ?? '';
     final listingOwner = listing.owner.toLowerCase();
     final isMyListing = userAddress.isNotEmpty && listingOwner == userAddress;
-    
+
     // Debug log
-    print('[RentalCard] Token: ${listing.tokenId}, Owner: $listingOwner, User: $userAddress, IsMyListing: $isMyListing');
-    
+    print(
+        '[RentalCard] Token: ${listing.tokenId}, Owner: $listingOwner, User: $userAddress, IsMyListing: $isMyListing');
+
     return Card(
       clipBehavior: Clip.antiAlias,
       elevation: 2,
@@ -2079,7 +2116,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> with SingleTickerProvid
                       ),
                     ),
             ),
-            
+
             // Property Info
             Expanded(
               child: Padding(
@@ -2097,7 +2134,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> with SingleTickerProvid
                       overflow: TextOverflow.ellipsis,
                     ),
                     const SizedBox(height: AppSpacing.xs),
-                    
+
                     // Price per night
                     Row(
                       children: [
@@ -2116,9 +2153,10 @@ class _HomeScreenState extends ConsumerState<HomeScreen> with SingleTickerProvid
                         ),
                       ],
                     ),
-                    
+
                     // Location
-                    if (listing.location != null && listing.location!.isNotEmpty) ...[
+                    if (listing.location != null &&
+                        listing.location!.isNotEmpty) ...[
                       const SizedBox(height: 4),
                       Row(
                         children: [
@@ -2141,9 +2179,10 @@ class _HomeScreenState extends ConsumerState<HomeScreen> with SingleTickerProvid
                         ],
                       ),
                     ],
-                    
+
                     // Active Days
-                    if (listing.activeDays != null && listing.activeDays!.isNotEmpty) ...[
+                    if (listing.activeDays != null &&
+                        listing.activeDays!.isNotEmpty) ...[
                       const SizedBox(height: 4),
                       Row(
                         children: [
@@ -2166,9 +2205,9 @@ class _HomeScreenState extends ConsumerState<HomeScreen> with SingleTickerProvid
                         ],
                       ),
                     ],
-                    
+
                     const Spacer(),
-                    
+
                     // Buttons - different for owner vs renter
                     if (isMyListing)
                       // Owner buttons: Edit & Remove
@@ -2178,9 +2217,11 @@ class _HomeScreenState extends ConsumerState<HomeScreen> with SingleTickerProvid
                             child: OutlinedButton.icon(
                               onPressed: () => _editRentalListing(listing),
                               icon: const Icon(Icons.edit, size: 14),
-                              label: const Text('Edit', style: TextStyle(fontSize: 12)),
+                              label: const Text('Edit',
+                                  style: TextStyle(fontSize: 12)),
                               style: OutlinedButton.styleFrom(
-                                padding: const EdgeInsets.symmetric(vertical: 8),
+                                padding:
+                                    const EdgeInsets.symmetric(vertical: 8),
                               ),
                             ),
                           ),
@@ -2189,10 +2230,12 @@ class _HomeScreenState extends ConsumerState<HomeScreen> with SingleTickerProvid
                             child: ElevatedButton.icon(
                               onPressed: () => _removeRentalListing(listing),
                               icon: const Icon(Icons.delete, size: 14),
-                              label: const Text('Remove', style: TextStyle(fontSize: 12)),
+                              label: const Text('Remove',
+                                  style: TextStyle(fontSize: 12)),
                               style: ElevatedButton.styleFrom(
                                 backgroundColor: Colors.red,
-                                padding: const EdgeInsets.symmetric(vertical: 8),
+                                padding:
+                                    const EdgeInsets.symmetric(vertical: 8),
                               ),
                             ),
                           ),
@@ -2227,10 +2270,10 @@ class _HomeScreenState extends ConsumerState<HomeScreen> with SingleTickerProvid
   // ============================================
   // RENTAL LISTING MANAGEMENT
   // ============================================
-  
+
   Future<void> _editRentalListing(RentalListing listing) async {
     final priceController = TextEditingController(text: listing.pricePerNight);
-    
+
     final result = await showDialog<double>(
       context: context,
       builder: (context) => AlertDialog(
@@ -2250,11 +2293,13 @@ class _HomeScreenState extends ConsumerState<HomeScreen> with SingleTickerProvid
               style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
             ),
             const SizedBox(height: 8),
-            Text('Current price: ${double.tryParse(listing.pricePerNight)?.toStringAsFixed(4) ?? '0.0000'} POL/night'),
+            Text(
+                'Current price: ${double.tryParse(listing.pricePerNight)?.toStringAsFixed(4) ?? '0.0000'} POL/night'),
             const SizedBox(height: 16),
             TextField(
               controller: priceController,
-              keyboardType: const TextInputType.numberWithOptions(decimal: true),
+              keyboardType:
+                  const TextInputType.numberWithOptions(decimal: true),
               decoration: InputDecoration(
                 labelText: 'New Price per Night',
                 hintText: 'e.g. 0.5',
@@ -2293,22 +2338,23 @@ class _HomeScreenState extends ConsumerState<HomeScreen> with SingleTickerProvid
         ],
       ),
     );
-    
+
     if (result != null && mounted) {
       await _processEditRentalListing(listing, result);
     }
   }
-  
-  Future<void> _processEditRentalListing(RentalListing listing, double newPrice) async {
+
+  Future<void> _processEditRentalListing(
+      RentalListing listing, double newPrice) async {
     try {
       final walletService = ref.read(walletServiceProvider);
       final walletState = ref.read(walletProvider);
       final walletAddress = walletState.address;
-      
+
       if (walletAddress == null) {
         throw Exception('Wallet not connected');
       }
-      
+
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(
@@ -2317,50 +2363,51 @@ class _HomeScreenState extends ConsumerState<HomeScreen> with SingleTickerProvid
           ),
         );
       }
-      
+
       // Step 1: Cancel old listing
-      final cancelData = await _rentalService.prepareCancelRentalListing(listing.listingId);
-      
+      final cancelData =
+          await _rentalService.prepareCancelRentalListing(listing.listingId);
+
       if (cancelData['success'] != true) {
         throw Exception(cancelData['error'] ?? 'Failed to prepare cancel');
       }
-      
+
       final cancelTxHash = await walletService.sendTransaction(
         to: cancelData['contract_address'],
         value: EtherAmount.zero(),
-        data: cancelData['function_data'].startsWith('0x') 
-            ? cancelData['function_data'] 
+        data: cancelData['function_data'].startsWith('0x')
+            ? cancelData['function_data']
             : '0x${cancelData['function_data']}',
         gas: 300000,
       );
-      
+
       if (!mounted) return;
-      
+
       // Wait a bit for transaction to be mined
       await Future.delayed(const Duration(seconds: 3));
-      
+
       // Step 2: Create new listing with new price
       final createData = await _rentalService.prepareCreateRentalListing(
         tokenId: listing.tokenId,
         pricePerNightPol: newPrice,
         ownerAddress: walletAddress,
       );
-      
+
       if (createData['success'] != true) {
         throw Exception(createData['error'] ?? 'Failed to prepare new listing');
       }
-      
+
       final createTxHash = await walletService.sendTransaction(
         to: createData['contract_address'],
         value: EtherAmount.zero(),
-        data: createData['function_data'].startsWith('0x') 
-            ? createData['function_data'] 
+        data: createData['function_data'].startsWith('0x')
+            ? createData['function_data']
             : '0x${createData['function_data']}',
         gas: 500000,
       );
-      
+
       if (!mounted) return;
-      
+
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: Text(
@@ -2371,13 +2418,12 @@ class _HomeScreenState extends ConsumerState<HomeScreen> with SingleTickerProvid
           duration: const Duration(seconds: 5),
         ),
       );
-      
+
       // Refresh listings
-      await _loadRentalListings();
-      
+      ref.invalidate(rentalListingsProvider);
     } catch (e) {
       if (!mounted) return;
-      
+
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: Text('❌ Failed to update listing: $e'),
@@ -2387,7 +2433,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> with SingleTickerProvid
       );
     }
   }
-  
+
   Future<void> _removeRentalListing(RentalListing listing) async {
     final confirmed = await showDialog<bool>(
       context: context,
@@ -2409,7 +2455,8 @@ class _HomeScreenState extends ConsumerState<HomeScreen> with SingleTickerProvid
             ),
             const SizedBox(height: 8),
             Text(listing.propertyName ?? 'Property #${listing.tokenId}'),
-            Text('Price: ${double.tryParse(listing.pricePerNight)?.toStringAsFixed(4) ?? '0.0000'} POL/night'),
+            Text(
+                'Price: ${double.tryParse(listing.pricePerNight)?.toStringAsFixed(4) ?? '0.0000'} POL/night'),
           ],
         ),
         actions: [
@@ -2425,22 +2472,22 @@ class _HomeScreenState extends ConsumerState<HomeScreen> with SingleTickerProvid
         ],
       ),
     );
-    
+
     if (confirmed == true && mounted) {
       await _processRemoveRentalListing(listing);
     }
   }
-  
+
   Future<void> _processRemoveRentalListing(RentalListing listing) async {
     try {
       final walletService = ref.read(walletServiceProvider);
       final walletState = ref.read(walletProvider);
       final walletAddress = walletState.address;
-      
+
       if (walletAddress == null) {
         throw Exception('Wallet not connected');
       }
-      
+
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(
@@ -2449,38 +2496,39 @@ class _HomeScreenState extends ConsumerState<HomeScreen> with SingleTickerProvid
           ),
         );
       }
-      
-      final cancelData = await _rentalService.prepareCancelRentalListing(listing.listingId);
-      
+
+      final cancelData =
+          await _rentalService.prepareCancelRentalListing(listing.listingId);
+
       if (cancelData['success'] != true) {
         throw Exception(cancelData['error'] ?? 'Failed to prepare cancel');
       }
-      
+
       final txHash = await walletService.sendTransaction(
         to: cancelData['contract_address'],
         value: EtherAmount.zero(),
-        data: cancelData['function_data'].startsWith('0x') 
-            ? cancelData['function_data'] 
+        data: cancelData['function_data'].startsWith('0x')
+            ? cancelData['function_data']
             : '0x${cancelData['function_data']}',
         gas: 300000,
       );
-      
+
       if (!mounted) return;
-      
+
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-          content: Text('✅ Rental listing removed!\nTX: ${txHash.substring(0, 10)}...'),
+          content: Text(
+              '✅ Rental listing removed!\nTX: ${txHash.substring(0, 10)}...'),
           backgroundColor: Colors.green,
           duration: const Duration(seconds: 5),
         ),
       );
-      
+
       // Refresh listings
-      await _loadRentalListings();
-      
+      ref.invalidate(rentalListingsProvider);
     } catch (e) {
       if (!mounted) return;
-      
+
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: Text('❌ Failed to remove listing: $e'),
@@ -2546,7 +2594,8 @@ class _HomeScreenState extends ConsumerState<HomeScreen> with SingleTickerProvid
               child: Column(
                 mainAxisAlignment: MainAxisAlignment.center,
                 children: [
-                  Icon(Icons.inventory_2_outlined, size: 64, color: AppColors.grey),
+                  Icon(Icons.inventory_2_outlined,
+                      size: 64, color: AppColors.grey),
                   const SizedBox(height: AppSpacing.md),
                   Icon(
                     Icons.inventory_2_outlined,
@@ -2605,11 +2654,11 @@ class _HomeScreenState extends ConsumerState<HomeScreen> with SingleTickerProvid
       ),
     );
   }
-  
+
   // ============================================
   // RENTAL BOOKING
   // ============================================
-  
+
   Future<void> _bookRental(RentalListing listing) async {
     try {
       // Show loading
@@ -2620,21 +2669,23 @@ class _HomeScreenState extends ConsumerState<HomeScreen> with SingleTickerProvid
           child: CircularProgressIndicator(),
         ),
       );
-      
+
       // Fetch booked dates from backend
-      final bookedTimestamps = await _rentalService.getBookedDates(listing.listingId);
-      
+      final bookedTimestamps =
+          await _rentalService.getBookedDates(listing.listingId);
+
       if (!mounted) return;
       Navigator.pop(context); // Close loading
-      
+
       // Convert timestamps to DateTime (UTC, normalized to midnight)
       final bookedDates = bookedTimestamps.map((timestamp) {
         // Timestamp is already UTC midnight from smart contract
-        final utcDate = DateTime.fromMillisecondsSinceEpoch(timestamp * 1000, isUtc: true);
+        final utcDate =
+            DateTime.fromMillisecondsSinceEpoch(timestamp * 1000, isUtc: true);
         // Convert to local date for comparison (only date part, ignore time)
         return DateTime(utcDate.year, utcDate.month, utcDate.day);
       }).toList();
-      
+
       // Show date picker with blocked dates
       final dateRange = await showDateRangePicker(
         context: context,
@@ -2653,7 +2704,8 @@ class _HomeScreenState extends ConsumerState<HomeScreen> with SingleTickerProvid
             child: child!,
           );
         },
-        selectableDayPredicate: (DateTime date, DateTime? rangeStart, DateTime? rangeEnd) {
+        selectableDayPredicate:
+            (DateTime date, DateTime? rangeStart, DateTime? rangeEnd) {
           // Check if this date is already booked
           for (var bookedDate in bookedDates) {
             if (date.year == bookedDate.year &&
@@ -2665,14 +2717,14 @@ class _HomeScreenState extends ConsumerState<HomeScreen> with SingleTickerProvid
           return true; // Date is available
         },
       );
-      
+
       if (dateRange == null || !mounted) return;
-      
+
       // Calculate nights and total price
       final checkIn = dateRange.start;
       final checkOut = dateRange.end;
       final nights = checkOut.difference(checkIn).inDays;
-      
+
       if (nights <= 0) {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(
@@ -2682,10 +2734,10 @@ class _HomeScreenState extends ConsumerState<HomeScreen> with SingleTickerProvid
         );
         return;
       }
-      
+
       final pricePerNight = double.tryParse(listing.pricePerNight) ?? 0.0;
       final totalPrice = pricePerNight * nights;
-      
+
       // Show confirmation dialog
       final confirmed = await showDialog<bool>(
         context: context,
@@ -2709,13 +2761,16 @@ class _HomeScreenState extends ConsumerState<HomeScreen> with SingleTickerProvid
                 ),
               ),
               const SizedBox(height: 16),
-              _buildBookingRow('Check-in:', '${checkIn.day}/${checkIn.month}/${checkIn.year}'),
+              _buildBookingRow('Check-in:',
+                  '${checkIn.day}/${checkIn.month}/${checkIn.year}'),
               const SizedBox(height: 8),
-              _buildBookingRow('Check-out:', '${checkOut.day}/${checkOut.month}/${checkOut.year}'),
+              _buildBookingRow('Check-out:',
+                  '${checkOut.day}/${checkOut.month}/${checkOut.year}'),
               const SizedBox(height: 8),
               _buildBookingRow('Nights:', '$nights'),
               const SizedBox(height: 8),
-              _buildBookingRow('Price per night:', '${pricePerNight.toStringAsFixed(4)} POL'),
+              _buildBookingRow('Price per night:',
+                  '${pricePerNight.toStringAsFixed(4)} POL'),
               const Divider(height: 24),
               _buildBookingRow(
                 'Total Price:',
@@ -2739,17 +2794,16 @@ class _HomeScreenState extends ConsumerState<HomeScreen> with SingleTickerProvid
           ],
         ),
       );
-      
+
       if (confirmed == true && mounted) {
         await _processRentalBooking(listing, checkIn, checkOut, totalPrice);
       }
-      
     } catch (e) {
       if (!mounted) return;
-      
+
       // Close any open dialogs
       Navigator.of(context).popUntil((route) => route.isFirst);
-      
+
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: Text('❌ Error: $e'),
@@ -2759,7 +2813,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> with SingleTickerProvid
       );
     }
   }
-  
+
   Widget _buildBookingRow(String label, String value, {bool isTotal = false}) {
     return Row(
       mainAxisAlignment: MainAxisAlignment.spaceBetween,
@@ -2782,7 +2836,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> with SingleTickerProvid
       ],
     );
   }
-  
+
   Future<void> _processRentalBooking(
     RentalListing listing,
     DateTime checkIn,
@@ -2793,11 +2847,11 @@ class _HomeScreenState extends ConsumerState<HomeScreen> with SingleTickerProvid
       final walletService = ref.read(walletServiceProvider);
       final walletState = ref.read(walletProvider);
       final walletAddress = walletState.address;
-      
+
       if (walletAddress == null) {
         throw Exception('Wallet not connected');
       }
-      
+
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(
@@ -2806,14 +2860,15 @@ class _HomeScreenState extends ConsumerState<HomeScreen> with SingleTickerProvid
           ),
         );
       }
-      
+
       // Convert DateTime to Unix timestamp (UTC midnight)
       // Normalize to midnight UTC to match smart contract's date handling
       final checkInUtc = DateTime.utc(checkIn.year, checkIn.month, checkIn.day);
-      final checkOutUtc = DateTime.utc(checkOut.year, checkOut.month, checkOut.day);
+      final checkOutUtc =
+          DateTime.utc(checkOut.year, checkOut.month, checkOut.day);
       final checkInTimestamp = checkInUtc.millisecondsSinceEpoch ~/ 1000;
       final checkOutTimestamp = checkOutUtc.millisecondsSinceEpoch ~/ 1000;
-      
+
       // Prepare transaction from backend
       final txData = await _rentalService.prepareRentAsset(
         listingId: listing.listingId,
@@ -2821,23 +2876,24 @@ class _HomeScreenState extends ConsumerState<HomeScreen> with SingleTickerProvid
         checkOutDate: checkOutTimestamp,
         renterAddress: walletAddress,
       );
-      
+
       if (txData['success'] != true) {
         throw Exception(txData['error'] ?? 'Failed to prepare booking');
       }
-      
+
       // Send transaction with payment
       final txHash = await walletService.sendTransaction(
         to: txData['contract_address'],
-        value: EtherAmount.fromBigInt(EtherUnit.wei, BigInt.parse(txData['value_wei'])),
-        data: txData['function_data'].startsWith('0x') 
-            ? txData['function_data'] 
+        value: EtherAmount.fromBigInt(
+            EtherUnit.wei, BigInt.parse(txData['value_wei'])),
+        data: txData['function_data'].startsWith('0x')
+            ? txData['function_data']
             : '0x${txData['function_data']}',
         gas: 800000, // Higher gas for complex rental transaction
       );
-      
+
       if (!mounted) return;
-      
+
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: Text(
@@ -2848,13 +2904,12 @@ class _HomeScreenState extends ConsumerState<HomeScreen> with SingleTickerProvid
           duration: const Duration(seconds: 5),
         ),
       );
-      
+
       // Refresh listings
-      await _loadRentalListings();
-      
+      ref.invalidate(rentalListingsProvider);
     } catch (e) {
       if (!mounted) return;
-      
+
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: Text('❌ Failed to book rental: $e'),

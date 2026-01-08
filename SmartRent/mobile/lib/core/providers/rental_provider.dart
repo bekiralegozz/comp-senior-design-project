@@ -74,20 +74,25 @@ class RentalListNotifier extends StateNotifier<RentalListState> {
 
     try {
       List<rm.Rental> blockchainRentals = [];
-      
+
       // Fetch rentals from blockchain based on wallet address
       if (walletAddress != null && walletAddress!.isNotEmpty) {
-        blockchainRentals = await _rentalService.getRentalsByRenter(walletAddress!);
+        blockchainRentals =
+            await _rentalService.getRentalsByRenter(walletAddress!);
       }
-      
+
       // Convert blockchain Rental to UI Rental model
-      final uiRentals = blockchainRentals.map((r) => _convertToUiRental(r)).toList();
-      
+      final uiRentals =
+          blockchainRentals.map((r) => _convertToUiRental(r)).toList();
+
       // Apply status filter if provided
       final filteredRentals = statusFilter != null && statusFilter!.isNotEmpty
-          ? uiRentals.where((rental) => rental.status?.toLowerCase() == statusFilter!.toLowerCase()).toList()
+          ? uiRentals
+              .where((rental) =>
+                  rental.status?.toLowerCase() == statusFilter!.toLowerCase())
+              .toList()
           : uiRentals;
-      
+
       state = RentalListState(
         rentals: filteredRentals,
         isLoading: false,
@@ -118,7 +123,7 @@ class RentalListNotifier extends StateNotifier<RentalListState> {
         statusStr = 'cancelled';
         break;
     }
-    
+
     return Rental(
       id: blockchainRental.rentalId.toString(),
       assetId: blockchainRental.tokenId.toString(),
@@ -133,7 +138,8 @@ class RentalListNotifier extends StateNotifier<RentalListState> {
       currency: 'POL',
       paymentTxHash: null,
       transactionHash: null,
-      createdAt: DateTime.fromMillisecondsSinceEpoch(blockchainRental.createdAt * 1000),
+      createdAt: DateTime.fromMillisecondsSinceEpoch(
+          blockchainRental.createdAt * 1000),
       updatedAt: null,
       asset: null,
     );
@@ -176,7 +182,8 @@ class RentalDetailNotifier extends StateNotifier<RentalDetailState> {
   final RentalService _rentalService;
   final String rentalId;
 
-  RentalDetailNotifier(this._rentalService, this.rentalId) : super(const RentalDetailState()) {
+  RentalDetailNotifier(this._rentalService, this.rentalId)
+      : super(const RentalDetailState()) {
     loadRental();
   }
 
@@ -184,8 +191,9 @@ class RentalDetailNotifier extends StateNotifier<RentalDetailState> {
     state = state.copyWith(isLoading: true, error: null);
 
     try {
-      final blockchainRental = await _rentalService.getRental(int.parse(rentalId));
-      
+      final blockchainRental =
+          await _rentalService.getRental(int.parse(rentalId));
+
       if (blockchainRental != null) {
         // Convert to UI model
         String statusStr;
@@ -200,7 +208,7 @@ class RentalDetailNotifier extends StateNotifier<RentalDetailState> {
             statusStr = 'cancelled';
             break;
         }
-        
+
         final uiRental = Rental(
           id: blockchainRental.rentalId.toString(),
           assetId: blockchainRental.tokenId.toString(),
@@ -210,9 +218,10 @@ class RentalDetailNotifier extends StateNotifier<RentalDetailState> {
           endDate: blockchainRental.checkOutDateTime,
           totalPrice: double.tryParse(blockchainRental.totalPrice),
           currency: 'POL',
-          createdAt: DateTime.fromMillisecondsSinceEpoch(blockchainRental.createdAt * 1000),
+          createdAt: DateTime.fromMillisecondsSinceEpoch(
+              blockchainRental.createdAt * 1000),
         );
-        
+
         state = state.copyWith(
           isLoading: false,
           rental: uiRental,
@@ -232,20 +241,23 @@ class RentalDetailNotifier extends StateNotifier<RentalDetailState> {
   Future<bool> payRent(String amount, List<String> owners) async {
     // This functionality is handled differently now
     // Rent payments are made via blockchain when booking
-    state = state.copyWith(isUpdating: false, error: 'Payment already completed at booking');
+    state = state.copyWith(
+        isUpdating: false, error: 'Payment already completed at booking');
     return false;
   }
 }
 
 // Providers
-final rentalListProvider = StateNotifierProvider.autoDispose<RentalListNotifier, RentalListState>(
+final rentalListProvider =
+    StateNotifierProvider.autoDispose<RentalListNotifier, RentalListState>(
   (ref) {
     final rentalService = ref.watch(rentalServiceProvider);
     return RentalListNotifier(rentalService);
   },
 );
 
-final myRentalsProvider = StateNotifierProvider.autoDispose<RentalListNotifier, RentalListState>(
+final myRentalsProvider =
+    StateNotifierProvider.autoDispose<RentalListNotifier, RentalListState>(
   (ref) {
     final rentalService = ref.watch(rentalServiceProvider);
     final walletAddress = ref.watch(walletAddressProvider);
@@ -253,16 +265,86 @@ final myRentalsProvider = StateNotifierProvider.autoDispose<RentalListNotifier, 
   },
 );
 
-final rentalDetailProvider = StateNotifierProvider.family<RentalDetailNotifier, RentalDetailState, String>(
+final rentalDetailProvider = StateNotifierProvider.family<RentalDetailNotifier,
+    RentalDetailState, String>(
   (ref, rentalId) {
     final rentalService = ref.watch(rentalServiceProvider);
     return RentalDetailNotifier(rentalService, rentalId);
   },
 );
 
-final activeRentalsProvider = StateNotifierProvider.autoDispose<RentalListNotifier, RentalListState>(
+final activeRentalsProvider =
+    StateNotifierProvider.autoDispose<RentalListNotifier, RentalListState>(
   (ref) {
     final rentalService = ref.watch(rentalServiceProvider);
     return RentalListNotifier(rentalService, statusFilter: 'active');
   },
 );
+
+// ============================================
+// RENTAL LISTINGS PROVIDER (for Rentplace)
+// ============================================
+
+/// Rental Listings State - for displaying available rental listings
+class RentalListingsState {
+  final List<rm.RentalListing> listings;
+  final bool isLoading;
+  final String? error;
+
+  const RentalListingsState({
+    this.listings = const [],
+    this.isLoading = false,
+    this.error,
+  });
+
+  RentalListingsState copyWith({
+    List<rm.RentalListing>? listings,
+    bool? isLoading,
+    String? error,
+  }) {
+    return RentalListingsState(
+      listings: listings ?? this.listings,
+      isLoading: isLoading ?? this.isLoading,
+      error: error,
+    );
+  }
+}
+
+/// Rental Listings Notifier - Fetches rental listings from API
+class RentalListingsNotifier extends StateNotifier<RentalListingsState> {
+  final RentalService _rentalService;
+
+  RentalListingsNotifier(this._rentalService)
+      : super(const RentalListingsState()) {
+    loadListings();
+  }
+
+  Future<void> loadListings() async {
+    if (state.isLoading) return;
+
+    state = state.copyWith(isLoading: true, error: null);
+
+    try {
+      final listings = await _rentalService.getAllRentalListings();
+
+      state = state.copyWith(
+        listings: listings,
+        isLoading: false,
+      );
+    } catch (e) {
+      state = state.copyWith(
+        isLoading: false,
+        error: 'Failed to load rental listings: $e',
+      );
+    }
+  }
+
+  Future<void> refresh() => loadListings();
+}
+
+/// Rental Listings Provider - Active rental listings from RentalHub
+final rentalListingsProvider =
+    StateNotifierProvider<RentalListingsNotifier, RentalListingsState>((ref) {
+  final rentalService = ref.watch(rentalServiceProvider);
+  return RentalListingsNotifier(rentalService);
+});
