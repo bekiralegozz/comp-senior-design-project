@@ -422,29 +422,42 @@ async def get_user_holdings(wallet_address: str):
     """
     Get user's NFT holdings from SmartRentHub registry
     Uses on-chain data from SmartRentHub.getAssetsByOwner()
+    Optimized with parallel metadata fetching
     """
+    import asyncio
+    
     try:
         # Get assets from SmartRentHub (includes balance)
         assets = smartrenthub_service.get_assets_by_owner(wallet_address)
         
+        if not assets:
+            return []
+        
         # Import rental_hub_service to check top shareholder
         from app.services.rental_hub_service import rental_hub_service
         
+        # Fetch all metadata in PARALLEL for speed
+        metadata_tasks = [
+            smartrenthub_service.fetch_metadata(asset["metadata_uri"])
+            for asset in assets
+        ]
+        all_metadata = await asyncio.gather(*metadata_tasks, return_exceptions=True)
+        
         # Transform to UserNftHolding format expected by Flutter
         holdings = []
-        for asset in assets:
+        for i, asset in enumerate(assets):
             token_id = asset["token_id"]
             balance = asset.get("balance", 0)
             total_shares = asset.get("total_shares", 1000)
             
-            # Fetch metadata from IPFS
-            metadata = await smartrenthub_service.fetch_metadata(asset["metadata_uri"])
+            # Get metadata from parallel fetch result
+            metadata = all_metadata[i] if not isinstance(all_metadata[i], Exception) else None
             name = metadata.get("name", f"Asset #{token_id}") if metadata else f"Asset #{token_id}"
             image_url = metadata.get("image", "") if metadata else ""
             
-            # Convert IPFS image URL
+            # Convert IPFS image URL - use faster gateway
             if image_url.startswith("ipfs://"):
-                image_url = image_url.replace("ipfs://", "https://ipfs.io/ipfs/")
+                image_url = image_url.replace("ipfs://", "https://gateway.pinata.cloud/ipfs/")
             
             # Check if user is top shareholder for rental button
             majority_shareholder = rental_hub_service.get_majority_shareholder(token_id)
@@ -714,25 +727,46 @@ class BuyListingRequest(BaseModel):
 async def get_active_listings():
     """
     Get all active marketplace listings from SmartRentHub
+    Optimized with parallel metadata fetching
     """
+    import asyncio
+    
     try:
         listings = smartrenthub_service.get_active_listings()
         
+        if not listings:
+            return {"listings": [], "total": 0}
+        
+        # Get all asset info first (sync calls - fast)
+        assets = {}
+        for listing in listings:
+            token_id = listing["token_id"]
+            if token_id not in assets:
+                assets[token_id] = smartrenthub_service.get_asset(token_id)
+        
+        # Fetch all metadata in PARALLEL for speed
+        metadata_uris = [assets[l["token_id"]]["metadata_uri"] if assets.get(l["token_id"]) else None for l in listings]
+        metadata_tasks = [
+            smartrenthub_service.fetch_metadata(uri) if uri else asyncio.coroutine(lambda: None)()
+            for uri in metadata_uris
+        ]
+        all_metadata = await asyncio.gather(*metadata_tasks, return_exceptions=True)
+        
         # Enrich with metadata
         enriched_listings = []
-        for listing in listings:
-            # Get asset info
-            asset = smartrenthub_service.get_asset(listing["token_id"])
+        for i, listing in enumerate(listings):
+            token_id = listing["token_id"]
+            asset = assets.get(token_id)
+            metadata = all_metadata[i] if not isinstance(all_metadata[i], Exception) else None
             
-            # Fetch metadata
-            metadata = None
-            if asset:
-                metadata = await smartrenthub_service.fetch_metadata(asset["metadata_uri"])
+            image_url = metadata.get("image", "") if metadata else ""
+            if image_url.startswith("ipfs://"):
+                image_url = image_url.replace("ipfs://", "https://gateway.pinata.cloud/ipfs/")
             
             enriched_listings.append({
                 **listing,
-                "asset_name": metadata.get("name", f"Asset #{listing['token_id']}") if metadata else f"Asset #{listing['token_id']}",
-                "asset_image": metadata.get("image", "").replace("ipfs://", "https://ipfs.io/ipfs/") if metadata else "",
+                "asset_name": metadata.get("name", f"Asset #{token_id}") if metadata else f"Asset #{token_id}",
+                "asset_image": image_url,
                 "total_shares": asset.get("total_shares", 1000) if asset else 1000
             })
         

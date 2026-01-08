@@ -91,9 +91,52 @@ class RentalHubService:
     
     # ==================== View Functions - Rental Listings ====================
     
+    def get_all_rental_listings_basic(self) -> List[Dict]:
+        """
+        Get all active rental listings from RentalHub WITHOUT metadata (fast)
+        Metadata should be fetched separately using async parallel fetching
+        
+        Returns: List of basic RentalListing structs
+        """
+        try:
+            if not self.contract:
+                return []
+            
+            # Call getActiveRentalListings() view function
+            listings_raw = self.contract.functions.getActiveRentalListings().call()
+            
+            if not listings_raw or not hasattr(listings_raw, '__iter__'):
+                return []
+            
+            listings = []
+            for listing in listings_raw:
+                # RentalListing struct: (listingId, tokenId, owner, pricePerNight, createdAt, isActive)
+                if isinstance(listing, (list, tuple)) and len(listing) >= 6:
+                    price_wei = listing[3]
+                    token_id = listing[1]
+                    
+                    listings.append({
+                        "listing_id": listing[0],
+                        "token_id": token_id,
+                        "owner": listing[2],
+                        "price_per_night_wei": price_wei,
+                        "price_per_night": str(float(self.w3.from_wei(price_wei, 'ether'))),
+                        "price_per_night_pol": float(self.w3.from_wei(price_wei, 'ether')),
+                        "created_at": listing[4],
+                        "is_active": listing[5]
+                    })
+            
+            return listings
+            
+        except Exception as e:
+            logger.error(f"Error getting rental listings basic: {e}")
+            return []
+    
     def get_all_rental_listings(self) -> List[Dict]:
         """
         Get all active rental listings from RentalHub with NFT metadata
+        NOTE: This is slow due to sequential IPFS fetches.
+        For better performance, use get_all_rental_listings_basic() + async metadata fetching
         
         Returns: List of RentalListing structs with attributes
         """

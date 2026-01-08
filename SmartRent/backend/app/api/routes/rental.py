@@ -438,10 +438,84 @@ async def get_all_rental_listings():
     - Reads directly from blockchain
     - No database queries
     - Always up-to-date
+    - Optimized with parallel metadata fetching
     """
+    import asyncio
+    from app.services.smartrenthub_service import smartrenthub_service
+    
     try:
-        listings = rental_hub_service.get_all_rental_listings()
-        return [RentalListingResponse(**listing) for listing in listings]
+        # Get raw listings from blockchain (fast - no metadata)
+        listings_basic = rental_hub_service.get_all_rental_listings_basic()
+        
+        if not listings_basic:
+            return []
+        
+        # Get asset info for all tokens (sync - fast)
+        assets = {}
+        for listing in listings_basic:
+            token_id = listing["token_id"]
+            if token_id not in assets:
+                assets[token_id] = smartrenthub_service.get_asset(token_id)
+        
+        # Fetch all metadata in PARALLEL using cached async service
+        metadata_uris = [
+            assets[l["token_id"]]["metadata_uri"] if assets.get(l["token_id"]) else None 
+            for l in listings_basic
+        ]
+        
+        async def safe_fetch(uri):
+            if not uri:
+                return None
+            return await smartrenthub_service.fetch_metadata(uri)
+        
+        metadata_tasks = [safe_fetch(uri) for uri in metadata_uris]
+        all_metadata = await asyncio.gather(*metadata_tasks, return_exceptions=True)
+        
+        # Enrich listings with metadata
+        enriched_listings = []
+        for i, listing in enumerate(listings_basic):
+            token_id = listing["token_id"]
+            asset = assets.get(token_id)
+            metadata = all_metadata[i] if not isinstance(all_metadata[i], Exception) else None
+            
+            # Get property name and image
+            property_name = f"Property #{token_id}"
+            image_url = ""
+            attributes = {}
+            
+            if metadata:
+                property_name = metadata.get("name", property_name)
+                image_url = metadata.get("image", "")
+                if image_url.startswith("ipfs://"):
+                    image_url = image_url.replace("ipfs://", "https://gateway.pinata.cloud/ipfs/")
+                
+                # Parse attributes
+                attrs_raw = metadata.get("attributes", [])
+                if isinstance(attrs_raw, list):
+                    for attr in attrs_raw:
+                        if isinstance(attr, dict) and "trait_type" in attr and "value" in attr:
+                            key = attr["trait_type"].lower().replace(" ", "_")
+                            attributes[key] = attr["value"]
+                else:
+                    attributes = attrs_raw if isinstance(attrs_raw, dict) else {}
+            
+            enriched_listings.append(RentalListingResponse(
+                listing_id=listing["listing_id"],
+                token_id=token_id,
+                owner=listing["owner"],
+                price_per_night_wei=listing["price_per_night_wei"],
+                price_per_night_pol=listing["price_per_night_pol"],
+                price_per_night=listing.get("price_per_night"),
+                created_at=listing["created_at"],
+                is_active=listing["is_active"],
+                property_name=property_name,
+                image_url=image_url,
+                total_shares=asset.get("total_shares", 1000) if asset else 1000,
+                attributes=attributes
+            ))
+        
+        return enriched_listings
+        
     except Exception as e:
         logger.error(f"Error getting rental listings: {e}")
         raise HTTPException(

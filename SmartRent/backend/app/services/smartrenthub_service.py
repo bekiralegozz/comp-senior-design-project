@@ -9,10 +9,32 @@ import json
 from pathlib import Path
 import logging
 import httpx
+import time
+from functools import lru_cache
 
 from app.core.config import settings
 
 logger = logging.getLogger(__name__)
+
+# Simple in-memory cache for metadata with TTL
+_metadata_cache: Dict[str, tuple] = {}  # {uri: (data, timestamp)}
+METADATA_CACHE_TTL = 300  # 5 minutes
+
+
+def get_cached_metadata(uri: str) -> Optional[Dict]:
+    """Get cached metadata if not expired"""
+    if uri in _metadata_cache:
+        data, timestamp = _metadata_cache[uri]
+        if time.time() - timestamp < METADATA_CACHE_TTL:
+            return data
+        else:
+            del _metadata_cache[uri]
+    return None
+
+
+def set_cached_metadata(uri: str, data: Dict):
+    """Cache metadata with timestamp"""
+    _metadata_cache[uri] = (data, time.time())
 
 
 class SmartRentHubService:
@@ -380,18 +402,41 @@ class SmartRentHubService:
     # ==================== Metadata Fetching ====================
     
     async def fetch_metadata(self, metadata_uri: str) -> Optional[Dict]:
-        """Fetch metadata from IPFS"""
+        """Fetch metadata from IPFS with caching"""
         try:
-            # Convert IPFS URI to HTTP gateway URL
-            if metadata_uri.startswith("ipfs://"):
-                http_url = metadata_uri.replace("ipfs://", "https://ipfs.io/ipfs/")
-            else:
-                http_url = metadata_uri
+            if not metadata_uri:
+                return None
             
-            async with httpx.AsyncClient(timeout=10.0) as client:
-                response = await client.get(http_url)
-                if response.status_code == 200:
-                    return response.json()
+            # Check cache first
+            cached = get_cached_metadata(metadata_uri)
+            if cached:
+                logger.debug(f"Cache hit for metadata: {metadata_uri}")
+                return cached
+            
+            # Convert IPFS URI to HTTP gateway URL - use faster gateways
+            if metadata_uri.startswith("ipfs://"):
+                ipfs_hash = metadata_uri.replace("ipfs://", "")
+                # Try Pinata first (faster), then fallback to ipfs.io
+                gateways = [
+                    f"https://gateway.pinata.cloud/ipfs/{ipfs_hash}",
+                    f"https://cloudflare-ipfs.com/ipfs/{ipfs_hash}",
+                    f"https://ipfs.io/ipfs/{ipfs_hash}"
+                ]
+            else:
+                gateways = [metadata_uri]
+            
+            async with httpx.AsyncClient(timeout=15.0) as client:
+                for gateway_url in gateways:
+                    try:
+                        response = await client.get(gateway_url)
+                        if response.status_code == 200:
+                            data = response.json()
+                            # Cache the result
+                            set_cached_metadata(metadata_uri, data)
+                            return data
+                    except Exception as e:
+                        logger.warning(f"Gateway {gateway_url} failed: {e}")
+                        continue
             
             return None
             
