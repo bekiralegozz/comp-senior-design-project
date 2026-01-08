@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:qr_flutter/qr_flutter.dart';
+import 'package:url_launcher/url_launcher.dart';
 import '../../core/providers/auth_provider.dart';
 
 class WalletConnectScreen extends ConsumerStatefulWidget {
@@ -218,6 +219,42 @@ class _WalletConnectScreenState extends ConsumerState<WalletConnectScreen> {
                             style: Theme.of(context).textTheme.bodySmall?.copyWith(
                                   color: Colors.grey[600],
                                 ),
+                          ),
+                          const SizedBox(height: 20),
+                          // Open in MetaMask button
+                          SizedBox(
+                            width: double.infinity,
+                            child: ElevatedButton.icon(
+                              onPressed: () async {
+                                final wcUri = authState.wcUri;
+                                if (wcUri != null) {
+                                  final encodedUri = Uri.encodeComponent(wcUri);
+                                  final metamaskUri = Uri.parse(
+                                    'https://metamask.app.link/wc?uri=$encodedUri'
+                                  );
+                                  try {
+                                    await launchUrl(
+                                      metamaskUri,
+                                      mode: LaunchMode.externalApplication,
+                                    );
+                                  } catch (e) {
+                                    if (kDebugMode) {
+                                      print('Could not launch MetaMask: $e');
+                                    }
+                                  }
+                                }
+                              },
+                              icon: const Icon(Icons.open_in_new, size: 20),
+                              label: const Text('Open in MetaMask'),
+                              style: ElevatedButton.styleFrom(
+                                backgroundColor: const Color(0xFFF6851B),
+                                foregroundColor: Colors.white,
+                                padding: const EdgeInsets.symmetric(vertical: 14),
+                                shape: RoundedRectangleBorder(
+                                  borderRadius: BorderRadius.circular(12),
+                                ),
+                              ),
+                            ),
                           ),
                         ],
                       ),

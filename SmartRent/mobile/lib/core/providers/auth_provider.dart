@@ -140,8 +140,8 @@ class AuthNotifier extends StateNotifier<AuthState> {
       // Start the connection (this generates the wcUri)
       final connectFuture = _walletService.connect();
       
-      // Give it a moment to generate the URI
-      await Future.delayed(const Duration(milliseconds: 300));
+      // Give it a moment to generate the URI - increased delay for real devices
+      await Future.delayed(const Duration(milliseconds: 800));
       
       // Get the wcUri for QR code display
       final wcUri = _walletService.getLatestWcUri();
