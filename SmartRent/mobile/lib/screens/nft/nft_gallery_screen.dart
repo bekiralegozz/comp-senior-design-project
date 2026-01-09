@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:go_router/go_router.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../services/nft_service.dart';
 import '../../services/nft_models.dart';
@@ -55,6 +56,10 @@ class _NftGalleryScreenState extends ConsumerState<NftGalleryScreen> {
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
+        leading: IconButton(
+          icon: const Icon(Icons.arrow_back),
+          onPressed: () => context.go('/'),
+        ),
         title: const Text('NFT Gallery'),
         actions: [
           IconButton(
